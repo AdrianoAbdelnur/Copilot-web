@@ -15,6 +15,14 @@ export default function Home() {
           <Link href="/routes" style={{ ...styles.btn, ...styles.btnSecondary }}>
             Routes
           </Link>
+
+          <Link href="/trips" style={{ ...styles.btn, ...styles.btnSecondary }}>
+            Trips
+          </Link>
+
+          <Link href="/admin" style={{ ...styles.btn, ...styles.btnSecondary }}>
+            Admin
+          </Link>
         </div>
       </div>
     </div>
