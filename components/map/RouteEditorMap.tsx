@@ -1,9 +1,10 @@
-"use client";
+﻿"use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { loadGoogleMaps } from "@/lib/gmaps/loader";
 import { makeDotMarker, setMarkerOff } from "@/lib/gmaps/markers";
 import { normalizeDensePath } from "@/lib/gmaps/route";
+import { esText } from "@/lib/i18n/es";
 import PoiModal, { PoiForm } from "./modals/PoiModal";
 import SegmentModal, { SegmentForm } from "./modals/SegmentModal";
 
@@ -21,7 +22,6 @@ type SnappedPoint = {
 };
 
 type PendingPoi = SnappedPoint | null;
-
 type PendingSegmentPoint = SnappedPoint;
 
 type PendingSegment = {
@@ -160,7 +160,6 @@ function snapToRouteSegments(route: LatLng[], click: LatLng, segStart: number, s
   const snappedLng = best.px / mPerDegLng;
 
   const distM = haversineMeters(click.latitude, click.longitude, snappedLat, snappedLng);
-
   const idx = best.t >= 0.5 ? best.segI + 1 : best.segI;
 
   return {
@@ -202,24 +201,20 @@ function buildSegmentPath(route: LatLng[], a: PendingSegmentPoint, b: PendingSeg
   pts.push({ latitude: A.latitude, longitude: A.longitude });
 
   const startVertex = Math.max(0, Math.min(route.length - 1, A.segI + 1));
-
   const endVertex = Math.max(0, Math.min(route.length - 1, B.segI));
 
   for (let i = startVertex; i <= endVertex; i++) {
     pts.push({ latitude: route[i].latitude, longitude: route[i].longitude });
   }
 
-
   pts.push({ latitude: B.latitude, longitude: B.longitude });
-
-
   if (pts.length < 2) pts.push({ latitude: B.latitude, longitude: B.longitude });
 
   return { path: pts, A, B };
 }
 
-
 export default function RouteEditorMap({ routeId }: { routeId: string }) {
+  const t = esText.routeEditor;
   const mapDivRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
 
@@ -231,7 +226,7 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
   const segmentPickRef = useRef<PendingSegmentPoint | null>(null);
   const segmentDraftMarkersRef = useRef<any[]>([]);
 
-  const [status, setStatus] = useState("Cargando...");
+  const [status, setStatus] = useState<string>(t.loading);
   const [mode, setMode] = useState<Mode>(null);
   const modeRef = useRef<Mode>(null);
 
@@ -246,6 +241,11 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
   const [pois, setPois] = useState<PoiPolicy[]>([]);
   const [segments, setSegments] = useState<SegmentPolicy[]>([]);
 
+  const [showRouteLayer, setShowRouteLayer] = useState(true);
+  const [showPoiLayer, setShowPoiLayer] = useState(true);
+  const [showSegmentLayer, setShowSegmentLayer] = useState(true);
+  const [sideTab, setSideTab] = useState<"layers" | "pois" | "segments">("layers");
+
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -258,7 +258,7 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
   useEffect(() => {
     const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY;
     if (!key) {
-      setStatus("Falta NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY");
+      setStatus(t.missingKey);
       return;
     }
 
@@ -266,10 +266,9 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
 
     (async () => {
       try {
-        setStatus("Cargando Google Maps...");
+        setStatus(t.loadingMaps);
         await loadGoogleMaps(key);
-        if (!alive) return;
-        if (!mapDivRef.current) return;
+        if (!alive || !mapDivRef.current) return;
 
         mapRef.current = new window.google.maps.Map(mapDivRef.current, {
           center: { lat: -26.8318, lng: -65.2194 },
@@ -279,24 +278,24 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
           draggingCursor: "grabbing",
         });
 
-        setStatus("Buscando ruta en DB...");
+        setStatus(t.loadingRoute);
         const res = await fetch(`/api/routes/${routeId}`);
-        if (!res.ok) throw new Error("No pude traer la ruta");
+        if (!res.ok) throw new Error(t.routeFetchError);
         const data = await res.json();
 
         const dense = data?.route?.google?.densePath;
-        if (!Array.isArray(dense) || dense.length < 2) throw new Error("La ruta no trae google.densePath válido");
+        if (!Array.isArray(dense) || dense.length < 2) throw new Error(t.invalidDensePath);
 
         const { route, path } = normalizeDensePath(dense);
-        if (route.length < 2 || path.length < 2) throw new Error("densePath no tiene coords usables");
+        if (route.length < 2 || path.length < 2) throw new Error(t.invalidDensePoints);
         routeRef.current = route;
 
         if (polylineRef.current) polylineRef.current.setMap(null);
         polylineRef.current = new window.google.maps.Polyline({
           path,
-          map: mapRef.current,
+          map: showRouteLayer ? mapRef.current : null,
           clickable: false,
-          strokeColor: "#ff0000",
+          strokeColor: "#ef4444",
           strokeOpacity: 1,
           strokeWeight: 4,
         });
@@ -324,7 +323,7 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
             setPendingPoi(picked);
             setPoiForm(defaultPoiForm());
             setPoiOpen(true);
-            setStatus(`POI: dist click→línea ${picked.distM.toFixed(1)}m`);
+            setStatus(`${t.poiSelected} ${picked.distM.toFixed(1)}m`);
             return;
           }
 
@@ -341,7 +340,7 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
             const draft = makeDotMarker({
               map: mapRef.current,
               position: { lat: picked.latitude, lng: picked.longitude },
-              title: `draft`,
+              title: "draft",
               color: "#111827",
               sizePx: 14,
             });
@@ -349,7 +348,7 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
 
             if (!segmentPickRef.current) {
               segmentPickRef.current = picked;
-              setStatus(`TRAMO: A listo (elegí B) | dist ${picked.distM.toFixed(1)}m`);
+              setStatus(`${t.segmentASelected} ${picked.distM.toFixed(1)}m`);
               return;
             }
 
@@ -363,12 +362,12 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
             setPendingSegment({ a, b });
             setSegmentForm(defaultSegmentForm());
             setSegmentOpen(true);
-            setStatus(`TRAMO: A → B | distB ${b.distM.toFixed(1)}m`);
+            setStatus(`${t.segmentABSelected} ${b.distM.toFixed(1)}m`);
           }
         });
 
         setLoaded(true);
-        setStatus("Listo.");
+        setStatus(t.ready);
       } catch (e: any) {
         setStatus(e?.message || "Error");
       }
@@ -384,6 +383,10 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
     const map = mapRef.current;
     if (!map) return;
 
+    if (polylineRef.current) {
+      polylineRef.current.setMap(showRouteLayer ? map : null);
+    }
+
     for (const m of poiMarkersRef.current) setMarkerOff(m);
     poiMarkersRef.current = [];
 
@@ -393,60 +396,60 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
     }
     segmentOverlaysRef.current = [];
 
-    for (const p of pois) {
-      if (!p) continue;
-      const lat = Number((p as any).latitude);
-      const lng = Number((p as any).longitude);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    if (showPoiLayer) {
+      for (const p of pois) {
+        const lat = Number((p as any).latitude);
+        const lng = Number((p as any).longitude);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
 
-      const color = (p as any)?.ui?.color || "#111827";
-      const sizePx = Number((p as any)?.ui?.sizePx || 20);
+        const color = (p as any)?.ui?.color || "#111827";
+        const sizePx = Number((p as any)?.ui?.sizePx || 20);
 
-      const m = makeDotMarker({
-        map,
-        position: { lat, lng },
-        title: (p as any)?.name ? String((p as any).name) : "POI",
-        color,
-        sizePx,
-      });
+        const m = makeDotMarker({
+          map,
+          position: { lat, lng },
+          title: (p as any)?.name ? String((p as any).name) : "POI",
+          color,
+          sizePx,
+        });
 
-      poiMarkersRef.current.push(m);
-    }
-
-    for (const s of segments) {
-      if (!s) continue;
-
-      const widthPx = Number((s as any)?.ui?.widthPx || (s as any)?.widthPx || 6);
-      const color = (s as any)?.ui?.color || (s as any)?.color || "#2563eb";
-
-      const pathArr = Array.isArray((s as any)?.path) ? (s as any).path : null;
-
-      let path: { lat: number; lng: number }[] = [];
-
-      if (pathArr && pathArr.length >= 2) {
-        path = pathArr
-          .map((pp: any) => ({ lat: Number(pp.latitude), lng: Number(pp.longitude) }))
-          .filter((pp: any) => Number.isFinite(pp.lat) && Number.isFinite(pp.lng));
-      } else if ((s as any)?.a && (s as any)?.b) {
-        const built = buildSegmentPath(routeRef.current, (s as any).a, (s as any).b);
-        path = built.path.map((pp) => ({ lat: pp.latitude, lng: pp.longitude }));
+        poiMarkersRef.current.push(m);
       }
-
-      if (path.length < 2) continue;
-
-      const poly = new window.google.maps.Polyline({
-        path,
-        map,
-        clickable: true,
-        strokeColor: color,
-        strokeOpacity: 1,
-        strokeWeight: widthPx,
-        zIndex: 10,
-      });
-
-      segmentOverlaysRef.current.push(poly);
     }
-  }, [loaded, pois, segments]);
+
+    if (showSegmentLayer) {
+      for (const s of segments) {
+        const widthPx = Number((s as any)?.ui?.widthPx || (s as any)?.widthPx || 6);
+        const color = (s as any)?.ui?.color || (s as any)?.color || "#2563eb";
+
+        const pathArr = Array.isArray((s as any)?.path) ? (s as any).path : null;
+        let path: { lat: number; lng: number }[] = [];
+
+        if (pathArr && pathArr.length >= 2) {
+          path = pathArr
+            .map((pp: any) => ({ lat: Number(pp.latitude), lng: Number(pp.longitude) }))
+            .filter((pp: any) => Number.isFinite(pp.lat) && Number.isFinite(pp.lng));
+        } else if ((s as any)?.a && (s as any)?.b) {
+          const built = buildSegmentPath(routeRef.current, (s as any).a, (s as any).b);
+          path = built.path.map((pp) => ({ lat: pp.latitude, lng: pp.longitude }));
+        }
+
+        if (path.length < 2) continue;
+
+        const poly = new window.google.maps.Polyline({
+          path,
+          map,
+          clickable: true,
+          strokeColor: color,
+          strokeOpacity: 1,
+          strokeWeight: widthPx,
+          zIndex: 10,
+        });
+
+        segmentOverlaysRef.current.push(poly);
+      }
+    }
+  }, [loaded, pois, segments, showPoiLayer, showSegmentLayer, showRouteLayer]);
 
   const clear = () => {
     for (const m of poiMarkersRef.current) setMarkerOff(m);
@@ -464,22 +467,22 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
 
     setPois([]);
     setSegments([]);
-    setStatus("Borré todo (en pantalla).");
+    setStatus(t.cleared);
   };
 
   const saveAllToDB = async () => {
     try {
-      setStatus("Guardando policy (pois + segments)...");
+      setStatus(t.saving);
       const res = await fetch(`/api/routes/${routeId}/policy`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pois, segments }),
       });
       const j = await res.json();
-      if (!res.ok) throw new Error(j?.error || "No se pudo guardar");
-      setStatus("Guardado OK");
+      if (!res.ok) throw new Error(j?.error || t.saveFailed);
+      setStatus(t.saved);
     } catch (e: any) {
-      setStatus(e?.message || "Error guardando");
+      setStatus(e?.message || t.saveFailed);
     }
   };
 
@@ -487,13 +490,13 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
     if (!pendingPoi) return;
 
     const name = poiForm.name.trim();
-    if (!name) return setStatus("POI: falta nombre");
+    if (!name) return setStatus(t.poiNameRequired);
 
     const radiusM = Number(poiForm.radiusM);
-    if (!Number.isFinite(radiusM) || radiusM <= 0) return setStatus("POI: radio inválido");
+    if (!Number.isFinite(radiusM) || radiusM <= 0) return setStatus(t.poiInvalidRadius);
 
     const sizePx = Number(poiForm.sizePx);
-    if (!Number.isFinite(sizePx) || sizePx < 12 || sizePx > 64) return setStatus("POI: tamaño inválido");
+    if (!Number.isFinite(sizePx) || sizePx < 12 || sizePx > 64) return setStatus(t.poiInvalidMarkerSize);
 
     const msgs = poiForm.navMessages ?? [];
     const pre = msgs.find((m: any) => m.type === "pre");
@@ -502,11 +505,11 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
 
     if (pre) {
       const d = Number(pre.distanceM ?? 200);
-      if (!Number.isFinite(d) || d <= 0) return setStatus("POI: distancia aviso previo inválida");
-      if (!String(pre.text || "").trim()) return setStatus("POI: falta texto del aviso previo");
+      if (!Number.isFinite(d) || d <= 0) return setStatus(t.poiInvalidPreDistance);
+      if (!String(pre.text || "").trim()) return setStatus(t.poiPreTextRequired);
     }
-    if (enter && !String(enter.text || "").trim()) return setStatus("POI: falta texto al ingresar");
-    if (exit && !String(exit.text || "").trim()) return setStatus("POI: falta texto al salir");
+    if (enter && !String(enter.text || "").trim()) return setStatus(t.poiEnterTextRequired);
+    if (exit && !String(exit.text || "").trim()) return setStatus(t.poiExitTextRequired);
 
     const poi: PoiPolicy = {
       id: uid(),
@@ -531,24 +534,25 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
 
     setPoiOpen(false);
     setPendingPoi(null);
-    setStatus(`POI agregado: ${name}`);
+    setStatus(`${t.poiAdded}: ${name}`);
   };
 
   const saveSegment = () => {
     if (!pendingSegment) return;
 
     const name = segmentForm.name.trim();
-    if (!name) return setStatus("TRAMO: falta nombre");
+    if (!name) return setStatus(t.segmentNameRequired);
 
     const widthPx = Number(segmentForm.widthPx);
-    if (!Number.isFinite(widthPx) || widthPx < 2 || widthPx > 18) return setStatus("TRAMO: ancho inválido");
+    if (!Number.isFinite(widthPx) || widthPx < 2 || widthPx > 18) return setStatus(t.segmentInvalidWidth);
 
     const vmax = Number(segmentForm.maxSpeed);
-    if (segmentForm.type === "velocidad_maxima" && (!Number.isFinite(vmax) || vmax <= 0))
-      return setStatus("TRAMO: vmax inválida");
+    if (segmentForm.type === "velocidad_maxima" && (!Number.isFinite(vmax) || vmax <= 0)) {
+      return setStatus(t.segmentInvalidSpeed);
+    }
 
     const { path, A, B } = buildSegmentPath(routeRef.current, pendingSegment.a, pendingSegment.b);
-    if (path.length < 2) return setStatus("TRAMO: no pude armar path");
+    if (path.length < 2) return setStatus(t.segmentPathError);
 
     const segment: SegmentPolicy = {
       id: uid(),
@@ -567,7 +571,7 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
 
     setSegmentOpen(false);
     setPendingSegment(null);
-    setStatus(`TRAMO agregado: ${name}`);
+    setStatus(`${t.segmentAdded}: ${name}`);
   };
 
   const btnStyle = (active: boolean) => ({
@@ -579,55 +583,152 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
     cursor: "pointer",
   });
 
-  const poiPendingText = pendingPoi ? `Se guardará sobre la ruta | dist click→línea ${pendingPoi.distM.toFixed(1)}m` : "";
-  const segPendingText = pendingSegment ? `Se guardará sobre la ruta: A → B` : "";
+  const poiPendingText = pendingPoi ? `${t.willSnapPoi} ${pendingPoi.distM.toFixed(1)}m` : "";
+  const segPendingText = pendingSegment ? t.willSnapSegment : "";
+
+  const compactPois = useMemo(() => pois.slice(0, 200), [pois]);
+  const compactSegments = useMemo(() => segments.slice(0, 200), [segments]);
 
   return (
-    <div style={{ padding: 12, fontFamily: "system-ui" }}>
-      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
-        <button onClick={() => setMode("poi")} style={btnStyle(mode === "poi")}>
-          POI
-        </button>
+    <div className="grid gap-3">
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-3">
+        <button onClick={() => setMode("poi")} style={btnStyle(mode === "poi")}>{t.modePoi}</button>
         <button
           onClick={() => {
             setMode("segment");
-            setStatus("TRAMO: elegí A");
+            setStatus(t.modeSegmentPickA);
           }}
           style={btnStyle(mode === "segment")}
         >
-          Tramo
+          {t.modeSegment}
         </button>
-        <button onClick={() => setMode(null)} style={btnStyle(mode === null)}>
-          Normal
-        </button>
+        <button onClick={() => setMode(null)} style={btnStyle(mode === null)}>{t.modeNormal}</button>
+
+        <span className="mx-1 h-6 w-px bg-slate-200" />
 
         <button
           onClick={saveAllToDB}
-          style={{ padding: "8px 10px", border: "1px solid #111827", borderRadius: 8, cursor: "pointer", background: "#111827", color: "#fff" }}
+          className="rounded-md border border-slate-900 bg-slate-900 px-3 py-2 text-xs font-medium text-white"
         >
-          Guardar en DB
+          {t.saveToDb}
         </button>
 
         <button
           onClick={clear}
-          style={{ padding: "8px 10px", border: "1px solid #e5e7eb", borderRadius: 8, cursor: "pointer" }}
+          className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700"
         >
-          Borrar
+          {t.clear}
         </button>
 
-        <div style={{ fontSize: 12, opacity: 0.8 }}>{status}</div>
+        <div className="ml-auto text-xs text-slate-500">{status}</div>
       </div>
 
-      <div
-        ref={mapDivRef}
-        style={{
-          width: "100%",
-          height: "75vh",
-          borderRadius: 12,
-          overflow: "hidden",
-          border: "1px solid #e5e7eb",
-        }}
-      />
+      <div className="grid gap-3 lg:grid-cols-[320px_1fr]">
+        <aside className="rounded-lg border border-slate-200 bg-white p-3">
+          <div className="mb-2 inline-flex rounded-md border border-slate-200 bg-slate-50 p-1">
+            <button
+              type="button"
+              onClick={() => setSideTab("layers")}
+              className={`rounded px-2 py-1 text-xs ${sideTab === "layers" ? "bg-white text-slate-900" : "text-slate-600"}`}
+            >
+              {t.sideTabs.layers}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSideTab("pois")}
+              className={`rounded px-2 py-1 text-xs ${sideTab === "pois" ? "bg-white text-slate-900" : "text-slate-600"}`}
+            >
+              {t.sideTabs.pois} ({pois.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setSideTab("segments")}
+              className={`rounded px-2 py-1 text-xs ${sideTab === "segments" ? "bg-white text-slate-900" : "text-slate-600"}`}
+            >
+              {t.sideTabs.segments} ({segments.length})
+            </button>
+          </div>
+
+          {sideTab === "layers" ? (
+            <div className="grid gap-2 text-sm text-slate-700">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={showRouteLayer} onChange={(e) => setShowRouteLayer(e.target.checked)} />
+                {t.layers.routeLine}
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={showPoiLayer} onChange={(e) => setShowPoiLayer(e.target.checked)} />
+                {t.layers.poiMarkers}
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={showSegmentLayer} onChange={(e) => setShowSegmentLayer(e.target.checked)} />
+                {t.layers.segmentOverlays}
+              </label>
+              <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 p-2 text-xs text-slate-500">
+                {t.layers.tip}
+              </div>
+            </div>
+          ) : null}
+
+          {sideTab === "pois" ? (
+            <div className="grid max-h-[58vh] gap-2 overflow-auto">
+              {compactPois.map((poi) => (
+                <div key={poi.id} className="rounded-md border border-slate-200 p-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-medium text-slate-900">{poi.name}</div>
+                      <div className="text-xs text-slate-500">{poi.type} | r={poi.radiusM}m | idx={poi.idx}</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPois((prev) => prev.filter((p) => p.id !== poi.id))}
+                      className="rounded border border-rose-200 px-2 py-1 text-[11px] text-rose-700"
+                    >
+                      {t.remove}
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {compactPois.length === 0 ? <div className="text-xs text-slate-500">{t.noPois}</div> : null}
+              {pois.length > compactPois.length ? (
+                <div className="text-xs text-slate-500">{t.showingFirstPois} {compactPois.length} POIs</div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {sideTab === "segments" ? (
+            <div className="grid max-h-[58vh] gap-2 overflow-auto">
+              {compactSegments.map((segment) => (
+                <div key={segment.id} className="rounded-md border border-slate-200 p-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-medium text-slate-900">{segment.name}</div>
+                      <div className="text-xs text-slate-500">
+                        {segment.type} | vmax={segment.maxSpeed ?? "-"} | width={segment.ui.widthPx}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSegments((prev) => prev.filter((s) => s.id !== segment.id))}
+                      className="rounded border border-rose-200 px-2 py-1 text-[11px] text-rose-700"
+                    >
+                      {t.remove}
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {compactSegments.length === 0 ? <div className="text-xs text-slate-500">{t.noSegments}</div> : null}
+              {segments.length > compactSegments.length ? (
+                <div className="text-xs text-slate-500">{t.showingFirstSegments} {compactSegments.length} tramos</div>
+              ) : null}
+            </div>
+          ) : null}
+        </aside>
+
+        <div
+          ref={mapDivRef}
+          className="h-[75vh] w-full overflow-hidden rounded-lg border border-slate-200"
+        />
+      </div>
 
       <PoiModal
         open={poiOpen}
@@ -660,3 +761,4 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
     </div>
   );
 }
+

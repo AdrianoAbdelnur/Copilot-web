@@ -9,6 +9,7 @@ export const tripEventTypes = [
   "segment_exit",
   "step_change",
   "speed_over_start",
+  "speed_over_peak",
   "speed_over_end",
   "offroute_start",
   "offroute_end",
@@ -44,6 +45,7 @@ const SegmentSchema = new Schema(
   {
     segmentId: { type: Schema.Types.Mixed, default: null },
     name: { type: String, default: null },
+    type: { type: String, default: null },
   },
   { _id: false }
 );

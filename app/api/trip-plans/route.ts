@@ -56,6 +56,8 @@ export async function GET(req: Request) {
     }
 
     const items = await TripPlan.find(query)
+      .populate("driverUserId", "firstName lastName email role")
+      .populate("routeId", "title")
       .sort({ plannedStartAt: -1 })
       .limit(parseLimit(url.searchParams.get("limit"), 100, 500))
       .lean();
@@ -119,10 +121,15 @@ export async function POST(req: Request) {
     }));
 
     const created = await TripPlan.insertMany(docs, { ordered: false });
+    const createdIds = created.map((item) => item._id);
+    const createdPopulated = await TripPlan.find({ _id: { $in: createdIds } })
+      .populate("driverUserId", "firstName lastName email role")
+      .populate("routeId", "title")
+      .lean();
 
     return Response.json({
       ok: true,
-      items: created,
+      items: createdPopulated,
       createdCount: created.length,
       multi: created.length > 1,
     });

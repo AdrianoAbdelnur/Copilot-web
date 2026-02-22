@@ -24,6 +24,10 @@ export async function GET(req: Request, ctx: Ctx) {
     await connectDB();
 
     const item = await findTripForUserScope(tripId, auth.id, isAdminRole(auth.role));
+    if (item?.populate) {
+      await item.populate("userId", "firstName lastName email role");
+      await item.populate("routeId", "title");
+    }
     const leanItem = item?.toObject ? item.toObject() : item;
     if (!leanItem) {
       return Response.json({ ok: false, error: "trip_not_found" }, { status: 404 });

@@ -26,6 +26,16 @@ type UserForm = {
 
 const ROLE_OPTIONS = ["user", "driver", "dispatcher", "manager", "admin", "superadmin"];
 
+function roleLabel(role: string) {
+  if (role === "user") return "usuario";
+  if (role === "driver") return "chofer";
+  if (role === "dispatcher") return "despachador";
+  if (role === "manager") return "manager";
+  if (role === "admin") return "admin";
+  if (role === "superadmin") return "superadmin";
+  return role;
+}
+
 function authHeaders(): HeadersInit {
   if (typeof window === "undefined") return {};
   const local = localStorage.getItem("token") || "";
@@ -135,7 +145,7 @@ export default function AdminPage() {
     setMsg("");
 
     if (!createForm.firstName || !createForm.lastName || !createForm.email || !createForm.password) {
-      setError("Completá nombre, apellido, email y password.");
+      setError("Completá nombre, apellido, email y contraseña.");
       return;
     }
 
@@ -207,7 +217,7 @@ export default function AdminPage() {
       return;
     }
 
-    setMsg("Usuario eliminado (soft delete).");
+    setMsg("Usuario eliminado (borrado lógico).");
     await loadUsers(page);
   };
 
@@ -236,8 +246,8 @@ export default function AdminPage() {
 
   return (
     <div style={{ padding: 20, fontFamily: "system-ui" }}>
-      <h1 style={{ margin: 0 }}>Admin</h1>
-      <div style={{ marginTop: 8, opacity: 0.8 }}>Panel de administracion</div>
+      <h1 style={{ margin: 0 }}>Administración</h1>
+      <div style={{ marginTop: 8, opacity: 0.8 }}>Panel de administración</div>
 
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
         <button onClick={() => setTab("users")} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #ddd", background: tab === "users" ? "#111" : "#fff", color: tab === "users" ? "#fff" : "#111" }}>
@@ -250,9 +260,9 @@ export default function AdminPage() {
 
       {tab === "roles" ? (
         <div style={{ marginTop: 14, border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
-          <h2 style={{ marginTop: 0 }}>Gestion de Roles</h2>
+          <h2 style={{ marginTop: 0 }}>Gestión de Roles</h2>
           <div>Los roles se administran desde el editor de usuario en la pestaña Usuarios.</div>
-          <div style={{ marginTop: 8, fontSize: 13, opacity: 0.8 }}>Roles sugeridos: {ROLE_OPTIONS.join(", ")}</div>
+          <div style={{ marginTop: 8, fontSize: 13, opacity: 0.8 }}>Roles sugeridos: {ROLE_OPTIONS.map(roleLabel).join(", ")}</div>
         </div>
       ) : null}
 
@@ -265,7 +275,7 @@ export default function AdminPage() {
               <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} style={{ padding: 10, borderRadius: 8 }}>
                 <option value="">Todos los roles</option>
                 {ROLE_OPTIONS.map((r) => (
-                  <option key={r} value={r}>{r}</option>
+                  <option key={r} value={r}>{roleLabel(r)}</option>
                 ))}
               </select>
               <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -306,7 +316,7 @@ export default function AdminPage() {
                   <button key={u._id} onClick={() => onSelectUser(u)} style={{ textAlign: "left", padding: 10, borderRadius: 8, border: selectedId === u._id ? "1px solid #111" : "1px solid #ddd", background: selectedId === u._id ? "#f1f5f9" : "#fff", cursor: "pointer" }}>
                     <div style={{ fontWeight: 700 }}>{u.firstName} {u.lastName}</div>
                     <div style={{ fontSize: 12, opacity: 0.8 }}>{u.email}</div>
-                    <div style={{ fontSize: 12, opacity: 0.8 }}>role: {u.role} {u.isDeleted ? "| deleted" : ""}</div>
+                    <div style={{ fontSize: 12, opacity: 0.8 }}>rol: {roleLabel(u.role)} {u.isDeleted ? "| eliminado" : ""}</div>
                   </button>
                 ))}
                 {items.length === 0 ? <div style={{ opacity: 0.7 }}>Sin usuarios.</div> : null}
@@ -330,25 +340,25 @@ export default function AdminPage() {
             </section>
 
             <section style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
-              <h2 style={{ marginTop: 0 }}>Crear Usuario</h2>
+              <h2 style={{ marginTop: 0 }}>Crear usuario</h2>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                 <input value={createForm.firstName} onChange={(e) => setCreateForm((p) => ({ ...p, firstName: e.target.value }))} placeholder="Nombre" style={{ padding: 10, borderRadius: 8 }} />
                 <input value={createForm.lastName} onChange={(e) => setCreateForm((p) => ({ ...p, lastName: e.target.value }))} placeholder="Apellido" style={{ padding: 10, borderRadius: 8 }} />
                 <input value={createForm.email} onChange={(e) => setCreateForm((p) => ({ ...p, email: e.target.value }))} placeholder="Email" style={{ padding: 10, borderRadius: 8 }} />
-                <input type="password" value={createForm.password} onChange={(e) => setCreateForm((p) => ({ ...p, password: e.target.value }))} placeholder="Password" style={{ padding: 10, borderRadius: 8 }} />
+                <input type="password" value={createForm.password} onChange={(e) => setCreateForm((p) => ({ ...p, password: e.target.value }))} placeholder="Contraseña" style={{ padding: 10, borderRadius: 8 }} />
                 <select value={createForm.role} onChange={(e) => setCreateForm((p) => ({ ...p, role: e.target.value }))} style={{ padding: 10, borderRadius: 8 }}>
-                  {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+                  {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
                 </select>
                 <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                  <label><input type="checkbox" checked={createForm.validatedMail} onChange={(e) => setCreateForm((p) => ({ ...p, validatedMail: e.target.checked }))} /> validatedMail</label>
-                  <label><input type="checkbox" checked={createForm.authorizedTransport} onChange={(e) => setCreateForm((p) => ({ ...p, authorizedTransport: e.target.checked }))} /> authorizedTransport</label>
+                  <label><input type="checkbox" checked={createForm.validatedMail} onChange={(e) => setCreateForm((p) => ({ ...p, validatedMail: e.target.checked }))} /> mail validado</label>
+                  <label><input type="checkbox" checked={createForm.authorizedTransport} onChange={(e) => setCreateForm((p) => ({ ...p, authorizedTransport: e.target.checked }))} /> transporte autorizado</label>
                 </div>
               </div>
               <button onClick={createUser} style={{ marginTop: 8, padding: "10px 12px", borderRadius: 8, border: "1px solid #111", background: "#111", color: "#fff" }}>
                 Crear usuario
               </button>
 
-              <h3 style={{ marginTop: 18 }}>Editar Usuario</h3>
+              <h3 style={{ marginTop: 18 }}>Editar usuario</h3>
               {!selectedUser ? <div style={{ opacity: 0.7 }}>Seleccioná un usuario de la lista.</div> : null}
               {selectedUser ? (
                 <>
@@ -357,14 +367,14 @@ export default function AdminPage() {
                     <input value={editForm.firstName} onChange={(e) => setEditForm((p) => ({ ...p, firstName: e.target.value }))} placeholder="Nombre" style={{ padding: 10, borderRadius: 8 }} />
                     <input value={editForm.lastName} onChange={(e) => setEditForm((p) => ({ ...p, lastName: e.target.value }))} placeholder="Apellido" style={{ padding: 10, borderRadius: 8 }} />
                     <input value={editForm.email} onChange={(e) => setEditForm((p) => ({ ...p, email: e.target.value }))} placeholder="Email" style={{ padding: 10, borderRadius: 8 }} />
-                    <input type="password" value={editForm.password} onChange={(e) => setEditForm((p) => ({ ...p, password: e.target.value }))} placeholder="Nuevo password (opcional)" style={{ padding: 10, borderRadius: 8 }} />
+                    <input type="password" value={editForm.password} onChange={(e) => setEditForm((p) => ({ ...p, password: e.target.value }))} placeholder="Nueva contraseña (opcional)" style={{ padding: 10, borderRadius: 8 }} />
                     <select value={editForm.role} onChange={(e) => setEditForm((p) => ({ ...p, role: e.target.value }))} style={{ padding: 10, borderRadius: 8 }}>
-                      {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+                      {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
                     </select>
                     <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                      <label><input type="checkbox" checked={editForm.validatedMail} onChange={(e) => setEditForm((p) => ({ ...p, validatedMail: e.target.checked }))} /> validatedMail</label>
-                      <label><input type="checkbox" checked={editForm.authorizedTransport} onChange={(e) => setEditForm((p) => ({ ...p, authorizedTransport: e.target.checked }))} /> authorizedTransport</label>
-                      <label><input type="checkbox" checked={editIsDeleted} onChange={(e) => setEditIsDeleted(e.target.checked)} /> isDeleted</label>
+                      <label><input type="checkbox" checked={editForm.validatedMail} onChange={(e) => setEditForm((p) => ({ ...p, validatedMail: e.target.checked }))} /> mail validado</label>
+                      <label><input type="checkbox" checked={editForm.authorizedTransport} onChange={(e) => setEditForm((p) => ({ ...p, authorizedTransport: e.target.checked }))} /> transporte autorizado</label>
+                      <label><input type="checkbox" checked={editIsDeleted} onChange={(e) => setEditIsDeleted(e.target.checked)} /> eliminado</label>
                     </div>
                   </div>
 
@@ -399,8 +409,8 @@ export default function AdminPage() {
             </h3>
             <div style={{ fontSize: 14, opacity: 0.85 }}>
               {confirmAction === "delete"
-                ? "Se marcará el usuario como eliminado (soft delete)."
-                : "Se reactivará el usuario removiendo el flag isDeleted."}
+                ? "Se marcará el usuario como eliminado (borrado lógico)."
+                : "Se reactivará el usuario removiendo el flag de eliminado."}
             </div>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
               <button onClick={() => setConfirmAction(null)} style={{ padding: "8px 10px", borderRadius: 8 }}>
@@ -423,4 +433,7 @@ export default function AdminPage() {
     </div>
   );
 }
+
+
+
 

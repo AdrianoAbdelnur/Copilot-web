@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { esText } from "@/lib/i18n/es";
 
 export type LatLng = { latitude: number; longitude: number };
 
@@ -148,6 +149,7 @@ export function RouteMapViewer({
   patchedSegments?: PatchedSegment[] | any[];
   mergedGoogle?: any | null;
 }) {
+  const t = esText.routeMapViewer;
   const mapDivRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
 
@@ -460,57 +462,57 @@ export function RouteMapViewer({
       <div style={{ padding: 10, fontSize: 12, display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
         <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <input type="checkbox" checked={showPolicy} onChange={(e) => setShowPolicy(e.target.checked)} />
-          Policy (Azul)
+          {t.policy}
         </label>
 
         <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <input type="checkbox" checked={showGoogleOriginal} onChange={(e) => setShowGoogleOriginal(e.target.checked)} />
-          Google original (Rojo)
+          {t.googleOriginal}
         </label>
 
         <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <input type="checkbox" checked={showPatchedSegments} disabled={!hasPatchedSegments} onChange={(e) => setShowPatchedSegments(e.target.checked)} />
-          Tramos Google nuevos (Verde FUERTE)
+          {t.patchedSegments}
         </label>
 
         <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <input type="checkbox" checked={showMerged} disabled={!hasMerged} onChange={(e) => setShowMerged(e.target.checked)} />
-          MERGED (Amarillo BRILLANTE)
+          {t.merged}
         </label>
 
         <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <input type="checkbox" checked={showStepsOriginal} onChange={(e) => setShowStepsOriginal(e.target.checked)} />
-          Steps originales (Amarillo)
+          {t.originalSteps}
         </label>
 
         <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <input type="checkbox" checked={showStepsPatched} onChange={(e) => setShowStepsPatched(e.target.checked)} />
-          Steps reparados (Verde FUERTE)
+          {t.patchedSteps}
         </label>
 
         <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <input type="checkbox" checked={showClusterPoints} onChange={(e) => setShowClusterPoints(e.target.checked)} />
-          Cluster points (Violeta)
+          {t.clusterPoints}
         </label>
 
         <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <input type="checkbox" checked={showClusterAnchors} onChange={(e) => setShowClusterAnchors(e.target.checked)} />
-          Cluster first/last
+          {t.clusterAnchors}
         </label>
 
         <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <input type="checkbox" checked={showKmlAnchors} onChange={(e) => setShowKmlAnchors(e.target.checked)} />
-          kmlStart/kmlEnd
+          {t.kmlAnchors}
         </label>
 
         <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <input type="checkbox" checked={showRequestAnchors} onChange={(e) => setShowRequestAnchors(e.target.checked)} />
-          Request origin/destination
+          {t.requestAnchors}
         </label>
 
         <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <input type="checkbox" checked={showWaypoints} onChange={(e) => setShowWaypoints(e.target.checked)} />
-          Waypoints (Celeste)
+          {t.waypoints}
         </label>
       </div>
 
