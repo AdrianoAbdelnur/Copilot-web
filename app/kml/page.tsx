@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 
@@ -9,13 +9,13 @@ export default function KmlPage() {
   const [lastResponse, setLastResponse] = useState<any>(null);
 
   const onPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    setFileName(f.name);
-    setSize(f.size);
+    setFileName(file.name);
+    setSize(file.size);
 
-    const text = await f.text();
+    const text = await file.text();
 
     const res = await fetch("/api/routes", {
       method: "POST",
@@ -24,7 +24,7 @@ export default function KmlPage() {
     });
 
     const json = await res.json();
-    console.log("SERVER RESPONSE:", json);
+    console.log("RESPUESTA DEL SERVIDOR:", json);
     setLastResponse(json);
   };
 
@@ -33,25 +33,16 @@ export default function KmlPage() {
       <h1 style={{ marginBottom: 12 }}>Cargar KML</h1>
 
       <div style={{ marginBottom: 12 }}>
-        <div style={{ marginBottom: 6 }}>Route name</div>
+        <div style={{ marginBottom: 6 }}>Nombre de la ruta</div>
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="Ej: route 1"
-          style={{
-            width: "100%",
-            padding: 10,
-            border: "1px solid #ddd",
-            borderRadius: 8,
-          }}
+          placeholder="Ej: ruta 1"
+          style={{ width: "100%", padding: 10, border: "1px solid #ddd", borderRadius: 8 }}
         />
       </div>
 
-      <input
-        type="file"
-        accept=".kml,application/vnd.google-earth.kml+xml,text/xml"
-        onChange={onPick}
-      />
+      <input type="file" accept=".kml,application/vnd.google-earth.kml+xml,text/xml" onChange={onPick} />
 
       <div style={{ marginTop: 16, opacity: 0.8 }}>
         <div>Archivo: {fileName || "-"}</div>
@@ -60,24 +51,13 @@ export default function KmlPage() {
 
       <div style={{ marginTop: 16, opacity: 0.8 }}>
         <div>Esto crea una Route en el backend y guarda title + kml + policyPack.</div>
-        <div>Abrí consola (F12 → Console) para ver el response.</div>
+        <div>Abrí consola (F12 ? Consola) para ver la respuesta.</div>
       </div>
 
       {lastResponse && (
         <div style={{ marginTop: 16 }}>
-          <div style={{ marginBottom: 6 }}>
-            <b>Respuesta del servidor</b>
-          </div>
-          <pre
-            style={{
-              padding: 12,
-              background: "#f7f7f7",
-              borderRadius: 8,
-              overflow: "auto",
-              maxHeight: 320,
-              fontSize: 12,
-            }}
-          >
+          <div style={{ marginBottom: 6 }}><b>Respuesta del servidor</b></div>
+          <pre style={{ padding: 12, background: "#f7f7f7", borderRadius: 8, overflow: "auto", maxHeight: 320, fontSize: 12 }}>
             {JSON.stringify(lastResponse, null, 2)}
           </pre>
         </div>
@@ -85,3 +65,4 @@ export default function KmlPage() {
     </div>
   );
 }
+

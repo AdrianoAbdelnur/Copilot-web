@@ -1,0 +1,157 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2026-02-21T00:00:00.000Z",
+  "__export_source": "insomnia.desktop.app:v2024.5.0",
+  "resources": [
+    {
+      "_id": "wrk_trips_module",
+      "_type": "workspace",
+      "name": "Trips API",
+      "description": "Coleccion para probar modulo Trips",
+      "scope": "collection"
+    },
+    {
+      "_id": "env_trips_base",
+      "_type": "environment",
+      "parentId": "wrk_trips_module",
+      "name": "Base Environment",
+      "data": {
+        "base_url": "http://localhost:3000",
+        "token": "",
+        "route_id": "",
+        "trip_id": ""
+      }
+    },
+    {
+      "_id": "fld_trips",
+      "_type": "request_group",
+      "parentId": "wrk_trips_module",
+      "name": "Trips"
+    },
+    {
+      "_id": "req_start_trip",
+      "_type": "request",
+      "parentId": "fld_trips",
+      "name": "Start Trip",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/trips/start",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"routeId\": \"{{ _.route_id }}\",\n  \"startPos\": {\n    \"latitude\": -34.6037,\n    \"longitude\": -58.3816\n  },\n  \"device\": {\n    \"platform\": \"android\",\n    \"appVersion\": \"1.0.0\",\n    \"deviceId\": \"dev-123\"\n  }\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" },
+        { "name": "Authorization", "value": "Bearer {{ _.token }}" }
+      ]
+    },
+    {
+      "_id": "req_list_trips",
+      "_type": "request",
+      "parentId": "fld_trips",
+      "name": "List Trips",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/trips?status=&from=&to=&limit=20",
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.token }}" }
+      ]
+    },
+    {
+      "_id": "req_get_trip",
+      "_type": "request",
+      "parentId": "fld_trips",
+      "name": "Get Trip",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/trips/{{ _.trip_id }}",
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.token }}" }
+      ]
+    },
+    {
+      "_id": "req_add_samples",
+      "_type": "request",
+      "parentId": "fld_trips",
+      "name": "Add Samples",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/trips/{{ _.trip_id }}/samples",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"samples\": [\n    {\n      \"t\": \"2026-02-21T12:00:01.000Z\",\n      \"pos\": { \"latitude\": -34.6038, \"longitude\": -58.3817 },\n      \"speedKmh\": 38.5,\n      \"heading\": 120,\n      \"accuracyM\": 6.2,\n      \"mm\": { \"index\": 12, \"t\": 0.34, \"distToPathM\": 4.1 }\n    },\n    {\n      \"t\": \"2026-02-21T12:00:03.000Z\",\n      \"pos\": { \"latitude\": -34.6040, \"longitude\": -58.3820 },\n      \"speedKmh\": 45.2\n    }\n  ]\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" },
+        { "name": "Authorization", "value": "Bearer {{ _.token }}" }
+      ]
+    },
+    {
+      "_id": "req_add_events",
+      "_type": "request",
+      "parentId": "fld_trips",
+      "name": "Add Events",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/trips/{{ _.trip_id }}/events",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"events\": [\n    {\n      \"t\": \"2026-02-21T12:00:00.000Z\",\n      \"type\": \"poi_enter\",\n      \"pos\": { \"latitude\": -34.6039, \"longitude\": -58.3819 },\n      \"poi\": { \"poiId\": \"poi-1\", \"title\": \"Peaje Norte\" }\n    },\n    {\n      \"t\": \"2026-02-21T12:00:02.000Z\",\n      \"type\": \"speed_over_start\",\n      \"pos\": { \"latitude\": -34.6041, \"longitude\": -58.3821 },\n      \"speed\": { \"limitKmh\": 40, \"speedKmh\": 52, \"overByKmh\": 12, \"overForMs\": 2000 }\n    }\n  ]\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" },
+        { "name": "Authorization", "value": "Bearer {{ _.token }}" }
+      ]
+    },
+    {
+      "_id": "req_get_events",
+      "_type": "request",
+      "parentId": "fld_trips",
+      "name": "Get Events",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/trips/{{ _.trip_id }}/events?from=&to=&type=&limit=500",
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.token }}" }
+      ]
+    },
+    {
+      "_id": "req_get_samples",
+      "_type": "request",
+      "parentId": "fld_trips",
+      "name": "Get Samples",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/trips/{{ _.trip_id }}/samples?from=&to=&limit=1000",
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.token }}" }
+      ]
+    },
+    {
+      "_id": "req_patch_status",
+      "_type": "request",
+      "parentId": "fld_trips",
+      "name": "Patch Status",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/api/trips/{{ _.trip_id }}/status",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"status\": \"paused\"\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" },
+        { "name": "Authorization", "value": "Bearer {{ _.token }}" }
+      ]
+    },
+    {
+      "_id": "req_finish_trip",
+      "_type": "request",
+      "parentId": "fld_trips",
+      "name": "Finish Trip",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/trips/{{ _.trip_id }}/finish",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"endPos\": { \"latitude\": -34.6050, \"longitude\": -58.3830 },\n  \"totalsPatch\": {\n    \"distanceM\": 3200,\n    \"speedOverDurationS\": 12,\n    \"offrouteDurationS\": 0\n  }\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" },
+        { "name": "Authorization", "value": "Bearer {{ _.token }}" }
+      ]
+    }
+  ]
+}
