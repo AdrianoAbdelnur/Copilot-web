@@ -10,6 +10,10 @@ export async function GET(req: Request, ctx: Ctx) {
   const { id } = await ctx.params;
   console.log("GET validate", { id });
 
+  if (!/^[a-fA-F0-9]{24}$/.test(String(id))) {
+    return Response.json({ ok: false, message: "ID de ruta invalido" }, { status: 400 });
+  }
+
   const doc = await Route.findById(id).lean();
   if (!doc) {
     return Response.json({ ok: false, message: "Route no encontrada" }, { status: 404 });

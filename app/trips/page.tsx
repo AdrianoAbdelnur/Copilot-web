@@ -14,6 +14,11 @@ type UserItem = {
 type RouteItem = {
   _id: string;
   title?: string;
+  google?: {
+    totals?: {
+      distanceM?: number;
+    };
+  };
 };
 
 type PopulatedUserRef = UserItem | string;
@@ -97,6 +102,41 @@ function tripDriverDisplayValue(trip: TripItem, userById: Map<string, UserItem>)
   return displayName(userById.get(String(trip.userId)) || { _id: String(trip.userId) });
 }
 
+type LatLng = { latitude: number; longitude: number };
+
+function haversineMeters(a: LatLng, b: LatLng): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const r = 6371000;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLng = toRad(b.longitude - a.longitude);
+  const lat1 = toRad(a.latitude);
+  const lat2 = toRad(b.latitude);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * r * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+function realDistanceFromSamples(samples: any[]): number {
+  let total = 0;
+  let prev: LatLng | null = null;
+  for (const sample of samples || []) {
+    const p = sample?.pos;
+    const lat = Number(p?.latitude);
+    const lng = Number(p?.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    const curr = { latitude: lat, longitude: lng };
+    if (prev) total += haversineMeters(prev, curr);
+    prev = curr;
+  }
+  return Math.round(total);
+}
+
+function routePlannedDistanceM(ref: PopulatedRouteRef | undefined | null): number {
+  if (!ref || typeof ref === "string") return 0;
+  return Number(ref?.google?.totals?.distanceM ?? 0) || 0;
+}
+
 function tripStatusLabel(status?: string) {
   if (status === "active") return "activo";
   if (status === "paused") return "pausado";
@@ -132,6 +172,7 @@ export default function TripsPage() {
   const [tripDetail, setTripDetail] = useState<any>(null);
   const [tripEvents, setTripEvents] = useState<any[]>([]);
   const [tripSamples, setTripSamples] = useState<any[]>([]);
+  const [realDistanceByTripId, setRealDistanceByTripId] = useState<Record<string, number>>({});
 
   const [driverFilter, setDriverFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -281,12 +322,72 @@ export default function TripsPage() {
     });
   }, [liveTrips, driverFilter, statusFilter]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const candidates = filteredLiveTrips
+      .filter((trip) => (Number(trip?.totals?.distanceM ?? 0) || 0) <= 0)
+      .filter((trip) => !realDistanceByTripId[trip._id])
+      .slice(0, 8);
+
+    if (candidates.length === 0) return;
+
+    (async () => {
+      for (const trip of candidates) {
+        try {
+          const res = await fetch(`/api/trips/${trip._id}/samples?limit=5000`, { headers: authHeaders() });
+          const json = await res.json().catch(() => ({}));
+          const items = Array.isArray(json?.items) ? json.items : [];
+          const distanceM = realDistanceFromSamples(items);
+          if (cancelled || distanceM <= 0) continue;
+
+          setRealDistanceByTripId((prev) => (prev[trip._id] ? prev : { ...prev, [trip._id]: distanceM }));
+          setLiveTrips((prev) =>
+            prev.map((t) =>
+              t._id === trip._id
+                ? { ...t, totals: { ...(t.totals ?? {}), distanceM } }
+                : t
+            )
+          );
+        } catch {
+          // Ignore individual card distance failures.
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filteredLiveTrips, realDistanceByTripId]);
+
   const activeCount = liveTrips.filter((trip) => trip.status === "active").length;
   const pausedCount = liveTrips.filter((trip) => trip.status === "paused").length;
   const finishedCount = liveTrips.filter((trip) => trip.status === "finished").length;
+  const tripDetailRealDistanceM = useMemo(() => realDistanceFromSamples(tripSamples), [tripSamples]);
+
+  useEffect(() => {
+    if (!selectedTripId || tripDetailRealDistanceM <= 0) return;
+
+    setTripDetail((prev: any) =>
+      prev && prev._id === selectedTripId
+        ? { ...prev, totals: { ...(prev.totals ?? {}), distanceM: tripDetailRealDistanceM } }
+        : prev
+    );
+
+    setLiveTrips((prev) =>
+      prev.map((trip) =>
+        trip._id === selectedTripId
+          ? {
+              ...trip,
+              totals: { ...(trip.totals ?? {}), distanceM: tripDetailRealDistanceM },
+            }
+          : trip
+      )
+    );
+  }, [selectedTripId, tripDetailRealDistanceM]);
 
   return (
-    <div className="min-h-[calc(100vh-57px)] bg-[#f6f7f8] text-slate-900">
+    <div className="min-h-[calc(100vh-57px)] bg-background text-slate-900">
       <div className="mx-auto max-w-[1600px] px-4 py-4 sm:px-6 lg:px-8">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
           <div>
@@ -374,7 +475,18 @@ export default function TripsPage() {
                 const selected = selectedTripId === trip._id;
                 const samplesCount = Number(trip?.totals?.samplesCount ?? 0);
                 const eventsCount = Number(trip?.totals?.eventsCount ?? 0);
-                const progressHint = Math.min(100, Math.max(5, Math.round((samplesCount + eventsCount) % 100)));
+                const persistedDistanceM = Number(trip?.totals?.distanceM ?? 0) || 0;
+                const realDistanceM =
+                  trip._id === selectedTripId && tripDetailRealDistanceM > 0
+                    ? tripDetailRealDistanceM
+                    : realDistanceByTripId[trip._id] || persistedDistanceM;
+                const plannedDistanceM = routePlannedDistanceM(trip.routeId);
+                const progressHint =
+                  trip.status === "finished"
+                    ? 100
+                    : plannedDistanceM > 0
+                      ? Math.max(0, Math.min(100, Math.round((realDistanceM / plannedDistanceM) * 100)))
+                      : 0;
 
                 return (
                   <button
@@ -409,7 +521,7 @@ export default function TripsPage() {
                     <div className="space-y-2">
                       <div className="flex items-center justify-between text-xs font-semibold">
                         <span className="text-slate-500">Inicio: {new Date(trip.startedAt).toLocaleString()}</span>
-                        <span className="text-slate-700">{progressHint}% actividad</span>
+                        <span className="text-slate-700">{progressHint}% recorrido</span>
                       </div>
                       <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                         <div className="h-full rounded-full bg-[#137fec]" style={{ width: `${progressHint}%` }} />
@@ -417,7 +529,7 @@ export default function TripsPage() {
                       <div className="flex flex-wrap gap-3 text-xs text-slate-500">
                         <span>Muestras: {trip?.totals?.samplesCount ?? 0}</span>
                         <span>Eventos: {trip?.totals?.eventsCount ?? 0}</span>
-                        <span>Distancia: {trip?.totals?.distanceM ?? 0}m</span>
+                        <span>Distancia: {realDistanceM}m</span>
                       </div>
                     </div>
                   </button>
@@ -459,7 +571,10 @@ export default function TripsPage() {
                     <DetailStat label="Estado" value={tripStatusLabel(tripDetail.status)} />
                     <DetailStat label="Inicio" value={new Date(tripDetail.startedAt).toLocaleString()} />
                     <DetailStat label="Fin" value={tripDetail.endedAt ? new Date(tripDetail.endedAt).toLocaleString() : "-"} />
-                    <DetailStat label="Distancia" value={`${tripDetail?.totals?.distanceM ?? 0}m`} />
+                    <DetailStat
+                      label="Distancia"
+                      value={`${tripDetailRealDistanceM || Number(tripDetail?.totals?.distanceM ?? 0) || 0}m`}
+                    />
                     <DetailStat label="Vel. máxima" value={`${tripDetail?.totals?.maxSpeedKmh ?? 0} km/h`} />
                     <DetailStat label="Muestras" value={String(tripDetail?.totals?.samplesCount ?? 0)} />
                     <DetailStat label="Eventos" value={String(tripDetail?.totals?.eventsCount ?? 0)} />

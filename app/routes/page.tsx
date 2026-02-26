@@ -28,7 +28,7 @@ const RouteMapViewer = dynamic(
   () => import("./RouteMapViewer").then((m) => m.RouteMapViewer),
   {
     ssr: false,
-    loading: () => <div className="h-[520px] animate-pulse rounded-lg bg-slate-100" />,
+    loading: () => <div className="h-130 animate-pulse rounded-lg bg-slate-100" />,
   }
 );
 

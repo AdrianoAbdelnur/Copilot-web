@@ -26,7 +26,7 @@ export async function GET(req: Request, ctx: Ctx) {
     const item = await findTripForUserScope(tripId, auth.id, isAdminRole(auth.role));
     if (item?.populate) {
       await item.populate("userId", "firstName lastName email role");
-      await item.populate("routeId", "title");
+      await item.populate("routeId", "title google.totals.distanceM");
     }
     const leanItem = item?.toObject ? item.toObject() : item;
     if (!leanItem) {

@@ -17,7 +17,7 @@ export default function OperationsShell({
   children: ReactNode;
 }) {
   return (
-    <div className="min-h-[calc(100vh-58px)] bg-slate-100">
+    <div className="min-h-[calc(100vh-58px)] bg-background">
       <div className="mx-auto grid max-w-[1500px] grid-cols-1 gap-4 p-4 lg:grid-cols-[220px_1fr]">
         <aside className="rounded-xl border border-slate-200 bg-white p-3">
           <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Copiloto Virtual</div>

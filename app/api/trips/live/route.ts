@@ -62,7 +62,7 @@ export async function GET(req: Request) {
 
     const items = await Trip.find(query)
       .populate("userId", "firstName lastName email role")
-      .populate("routeId", "title")
+      .populate("routeId", "title google.totals.distanceM")
       .sort({ startedAt: -1 })
       .limit(parseLimit(url.searchParams.get("limit"), 200, 1000))
       .lean();
