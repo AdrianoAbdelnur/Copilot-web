@@ -9,6 +9,9 @@ export default function RouteBuilderMap() {
   const mapRef = useRef<any>(null);
   const directionsServiceRef = useRef<any>(null);
   const directionsRendererRef = useRef<any>(null);
+  const directionsChangedListenerRef = useRef<any>(null);
+  const routeHistoryRef = useRef<any[]>([]);
+  const isApplyingHistoryRef = useRef(false);
   const routeMarkersRef = useRef<any[]>([]);
   const endpointPreviewMarkersRef = useRef<{ origin: any | null; destination: any | null }>({
     origin: null,
@@ -36,11 +39,20 @@ export default function RouteBuilderMap() {
   const [waypoints, setWaypoints] = useState<string[]>([]);
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeError, setRouteError] = useState("");
+  const [canUndoRouteEdit, setCanUndoRouteEdit] = useState(false);
 
   const clearEndpointPreviewMarker = (kind: "origin" | "destination") => {
     endpointPreviewMarkersRef.current[kind]?.setMap?.(null);
     endpointPreviewMarkersRef.current[kind] = null;
     endpointPreviewPositionsRef.current[kind] = null;
+  };
+
+  const pushRouteHistory = (result: any) => {
+    if (!result) return;
+    const last = routeHistoryRef.current[routeHistoryRef.current.length - 1];
+    if (last === result) return;
+    routeHistoryRef.current.push(result);
+    setCanUndoRouteEdit(routeHistoryRef.current.length > 1);
   };
 
   const fitPreviewPointsOrFocus = (fallbackPosition?: any) => {
@@ -66,7 +78,7 @@ export default function RouteBuilderMap() {
     if ((map.getZoom?.() ?? 0) < 14) map.setZoom?.(14);
   };
 
-  const drawEndpointPreviewMarker = (kind: "origin" | "destination", position: any) => {
+  const drawEndpointPreviewMarker = (kind: "origin" | "destination", position: any, shouldFit = true) => {
     const map = mapRef.current;
     if (!map || !window.google?.maps || !position) return;
 
@@ -93,7 +105,7 @@ export default function RouteBuilderMap() {
 
     endpointPreviewMarkersRef.current[kind] = marker;
     endpointPreviewPositionsRef.current[kind] = position;
-    fitPreviewPointsOrFocus(position);
+    if (shouldFit) fitPreviewPointsOrFocus(position);
   };
 
   const clearWaypointPreviewMarker = (index: number) => {
@@ -102,7 +114,7 @@ export default function RouteBuilderMap() {
     waypointPreviewPositionsRef.current[index] = null;
   };
 
-  const drawWaypointPreviewMarker = (index: number, position: any) => {
+  const drawWaypointPreviewMarker = (index: number, position: any, shouldFit = true) => {
     const map = mapRef.current;
     if (!map || !window.google?.maps || !position) return;
 
@@ -129,7 +141,25 @@ export default function RouteBuilderMap() {
 
     waypointPreviewMarkersRef.current[index] = marker;
     waypointPreviewPositionsRef.current[index] = position;
-    fitPreviewPointsOrFocus(position);
+    if (shouldFit) fitPreviewPointsOrFocus(position);
+  };
+
+  const hidePreviewMarkersVisuals = () => {
+    endpointPreviewMarkersRef.current.origin?.setMap?.(null);
+    endpointPreviewMarkersRef.current.destination?.setMap?.(null);
+    waypointPreviewMarkersRef.current.forEach((marker) => marker?.setMap?.(null));
+  };
+
+  const restorePreviewMarkersVisuals = () => {
+    const originPos = endpointPreviewPositionsRef.current.origin;
+    const destinationPos = endpointPreviewPositionsRef.current.destination;
+    if (originPos) drawEndpointPreviewMarker("origin", originPos, false);
+    if (destinationPos) drawEndpointPreviewMarker("destination", destinationPos, false);
+
+    waypointPreviewPositionsRef.current.forEach((pos, index) => {
+      if (!pos) return;
+      drawWaypointPreviewMarker(index, pos, false);
+    });
   };
 
   useEffect(() => {
@@ -173,8 +203,16 @@ export default function RouteBuilderMap() {
     directionsServiceRef.current = new window.google.maps.DirectionsService();
     directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
       map: mapRef.current,
-      draggable: false,
+      draggable: true,
       suppressMarkers: true,
+    });
+
+    directionsChangedListenerRef.current = directionsRendererRef.current.addListener("directions_changed", () => {
+      const result = directionsRendererRef.current?.getDirections?.();
+      if (!result) return;
+      if (isApplyingHistoryRef.current) return;
+      pushRouteHistory(result);
+      drawRouteMarkers(result);
     });
   }, [status]);
 
@@ -210,6 +248,7 @@ export default function RouteBuilderMap() {
       clearEndpointPreviewMarker("origin");
       clearEndpointPreviewMarker("destination");
       for (let i = 0; i < waypointPreviewMarkersRef.current.length; i += 1) clearWaypointPreviewMarker(i);
+      directionsChangedListenerRef.current?.remove?.();
       directionsRendererRef.current?.setMap?.(null);
       originAutocompleteListenerRef.current?.remove?.();
       destinationAutocompleteListenerRef.current?.remove?.();
@@ -334,7 +373,30 @@ export default function RouteBuilderMap() {
     directionsRendererRef.current?.setDirections?.({ routes: [] });
     for (const marker of routeMarkersRef.current) marker?.setMap?.(null);
     routeMarkersRef.current = [];
+    restorePreviewMarkersVisuals();
+    routeHistoryRef.current = [];
+    setCanUndoRouteEdit(false);
     setRouteError("");
+  };
+
+  const undoRouteEdit = () => {
+    if (!directionsRendererRef.current) return;
+    if (routeHistoryRef.current.length <= 1) return;
+
+    routeHistoryRef.current.pop();
+    const previous = routeHistoryRef.current[routeHistoryRef.current.length - 1];
+    if (!previous) {
+      setCanUndoRouteEdit(false);
+      return;
+    }
+
+    isApplyingHistoryRef.current = true;
+    directionsRendererRef.current.setDirections(previous);
+    drawRouteMarkers(previous);
+    setCanUndoRouteEdit(routeHistoryRef.current.length > 1);
+    window.setTimeout(() => {
+      isApplyingHistoryRef.current = false;
+    }, 0);
   };
 
   const handleOriginChange = (value: string) => {
@@ -350,6 +412,8 @@ export default function RouteBuilderMap() {
   const drawRouteMarkers = (result: any) => {
     const map = mapRef.current;
     if (!map || !window.google?.maps) return;
+
+    hidePreviewMarkersVisuals();
 
     for (const marker of routeMarkersRef.current) marker?.setMap?.(null);
     routeMarkersRef.current = [];
@@ -423,6 +487,8 @@ export default function RouteBuilderMap() {
 
       const result = await directionsServiceRef.current.route(request);
       directionsRendererRef.current?.setDirections?.(result);
+      routeHistoryRef.current = [];
+      pushRouteHistory(result);
       drawRouteMarkers(result);
     } catch {
       setRouteError("No se pudo calcular la ruta con esas direcciones.");
@@ -480,6 +546,50 @@ export default function RouteBuilderMap() {
       />
 
       <div style={{ position: "relative", zIndex: 1, minWidth: 0, background: "#e2e8f0" }}>
+        {canUndoRouteEdit ? (
+          <button
+            type="button"
+            onClick={undoRouteEdit}
+            style={{
+              position: "absolute",
+              top: "50%",
+              right: 10,
+              transform: "translateY(-50%)",
+              zIndex: 5,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "7px 11px",
+              borderRadius: 999,
+              border: "1px solid #cbd5e1",
+              background: "rgba(255,255,255,0.98)",
+              color: "#0f172a",
+              fontSize: 12,
+              fontWeight: 600,
+              boxShadow: "0 6px 18px rgba(15,23,42,0.14)",
+              backdropFilter: "blur(4px)",
+              cursor: "pointer",
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M9 8H5v4"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M5 12c1.6-3 4.4-4.5 7.6-4.5 4.4 0 7.9 3.1 7.9 7.6S17 22 12.6 22c-2.7 0-4.8-1-6.3-2.6"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            Deshacer
+          </button>
+        ) : null}
         <div ref={mapDivRef} style={{ width: "100%", height: "100%" }} />
       </div>
     </div>
