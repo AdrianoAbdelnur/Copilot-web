@@ -7,6 +7,30 @@ import TripPlaybackMap from "../TripPlaybackMap";
 
 type LatLng = { latitude: number; longitude: number };
 
+function haversineMeters(a: LatLng, b: LatLng): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const r = 6371000;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLng = toRad(b.longitude - a.longitude);
+  const lat1 = toRad(a.latitude);
+  const lat2 = toRad(b.latitude);
+
+  const sinLat = Math.sin(dLat / 2);
+  const sinLng = Math.sin(dLng / 2);
+  const h = sinLat * sinLat + Math.cos(lat1) * Math.cos(lat2) * sinLng * sinLng;
+  return 2 * r * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+function normalizeObjectId(value: unknown): string {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "object" && value !== null) {
+    const maybeId = (value as { _id?: unknown })._id;
+    return typeof maybeId === "string" ? maybeId : "";
+  }
+  return "";
+}
+
 function authHeaders(): HeadersInit {
   if (typeof window === "undefined") return {};
   const local = localStorage.getItem("token") || "";
@@ -75,8 +99,9 @@ export default function TripDetailPage() {
       setEvents(eventsJson?.items || []);
       setSamples(samplesJson?.items || []);
 
-      if (item?.routeId) {
-        const routeRes = await fetch(`/api/routes/${item.routeId}`);
+      const routeId = normalizeObjectId(item?.routeId);
+      if (routeId) {
+        const routeRes = await fetch(`/api/routes/${routeId}`);
         const routeJson = await routeRes.json().catch(() => ({}));
         setRouteDoc(routeJson?.route ?? null);
       } else {
@@ -106,13 +131,42 @@ export default function TripDetailPage() {
     [samples]
   );
 
+  const realDistanceM = useMemo(() => {
+    if (samplePath.length < 2) return 0;
+    let total = 0;
+    for (let i = 1; i < samplePath.length; i += 1) {
+      total += haversineMeters(samplePath[i - 1], samplePath[i]);
+    }
+    return Math.round(total);
+  }, [samplePath]);
+
   return (
-    <div style={{ padding: 20, fontFamily: "system-ui" }}>
+    <div style={{ padding: 20, fontFamily: "system-ui", color: "var(--foreground)" }}>
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-        <Link href="/trips" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", textDecoration: "none", color: "#111" }}>
+        <Link
+          href="/trips"
+          style={{
+            padding: "8px 10px",
+            borderRadius: 8,
+            border: "1px solid var(--border)",
+            background: "var(--surface)",
+            textDecoration: "none",
+            color: "var(--foreground)",
+          }}
+        >
           Volver a Viajes
         </Link>
-        <button onClick={loadAll} disabled={loading} style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd" }}>
+        <button
+          onClick={loadAll}
+          disabled={loading}
+          style={{
+            padding: "8px 10px",
+            borderRadius: 8,
+            border: "1px solid var(--border)",
+            background: "var(--surface)",
+            color: "var(--foreground)",
+          }}
+        >
           {loading ? "Cargando..." : "Refrescar"}
         </button>
       </div>
@@ -127,7 +181,9 @@ export default function TripDetailPage() {
           <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 10 }}>Inicio: <b>{new Date(trip.startedAt).toLocaleString()}</b></div>
           <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 10 }}>Fin: <b>{trip.endedAt ? new Date(trip.endedAt).toLocaleString() : "-"}</b></div>
           <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 10 }}>Duración: <b>{trip?.totals?.durationS ?? 0}s</b></div>
-          <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 10 }}>Distancia: <b>{trip?.totals?.distanceM ?? 0}m</b></div>
+          <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 10 }}>
+            Distancia: <b>{realDistanceM || trip?.totals?.distanceM || 0}m</b>
+          </div>
           <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 10 }}>Velocidad máxima: <b>{trip?.totals?.maxSpeedKmh ?? 0} km/h</b></div>
           <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 10 }}>Muestras: <b>{trip?.totals?.samplesCount ?? samples.length}</b></div>
           <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 10 }}>Eventos: <b>{trip?.totals?.eventsCount ?? events.length}</b></div>

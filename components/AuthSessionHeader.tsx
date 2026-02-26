@@ -1,8 +1,9 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { esText } from "@/lib/i18n/es";
+import ThemeToggle from "@/components/ThemeToggle";
 
 type MeUser = {
   firstName?: string;
@@ -64,14 +65,22 @@ export default function AuthSessionHeader() {
     router.replace("/login");
   };
 
+  const onGoBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.push("/");
+  };
+
   return (
     <header
       style={{
         position: "sticky",
         top: 0,
         zIndex: 50,
-        background: "#ffffff",
-        borderBottom: "1px solid #e5e7eb",
+        background: "var(--surface)",
+        borderBottom: "1px solid var(--border)",
       }}
     >
       <div
@@ -86,25 +95,54 @@ export default function AuthSessionHeader() {
           fontFamily: "system-ui",
         }}
       >
-        <div style={{ fontSize: 13, color: "#111827" }}>
+        <div style={{ fontSize: 13, color: "var(--foreground)" }}>
           {loading
             ? esText.authHeader.loading
             : `${esText.authHeader.user}: ${label} | ${esText.authHeader.role}: ${role}`}
         </div>
-        <button
-          onClick={onLogout}
-          style={{
-            padding: "8px 10px",
-            borderRadius: 8,
-            border: "1px solid #d1d5db",
-            background: "#fff",
-            cursor: "pointer",
-          }}
-        >
-          {esText.authHeader.logout}
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {pathname !== "/" ? (
+            <button
+              type="button"
+              onClick={onGoBack}
+              aria-label="Volver"
+              title="Volver"
+              style={{
+                height: 38,
+                padding: "0 10px",
+                borderRadius: 10,
+                border: "1px solid var(--border)",
+                background: "var(--surface)",
+                color: "var(--foreground)",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                cursor: "pointer",
+              }}
+            >
+              <span className="material-symbols-outlined" aria-hidden="true" style={{ fontSize: 20 }}>
+                arrow_back
+              </span>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Volver</span>
+            </button>
+          ) : null}
+          <ThemeToggle />
+          <button
+            onClick={onLogout}
+            style={{
+              padding: "8px 10px",
+              borderRadius: 8,
+              border: "1px solid var(--border)",
+              background: "var(--surface)",
+              color: "var(--foreground)",
+              cursor: "pointer",
+            }}
+          >
+            {esText.authHeader.logout}
+          </button>
+        </div>
       </div>
     </header>
   );
 }
-
