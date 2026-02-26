@@ -103,6 +103,7 @@ export default function TripDetailPage() {
       if (routeId) {
         const routeRes = await fetch(`/api/routes/${routeId}`);
         const routeJson = await routeRes.json().catch(() => ({}));
+        console.log("routeJson", routeJson);
         setRouteDoc(routeJson?.route ?? null);
       } else {
         setRouteDoc(null);
@@ -123,9 +124,43 @@ export default function TripDetailPage() {
     return Array.isArray(dense) ? dense : [];
   }, [routeDoc]);
 
+  const policyRoutePath: LatLng[] = useMemo(() => {
+    const line = routeDoc?.policyPack?.route?.line;
+    if (Array.isArray(line)) {
+      return line
+        .map((p: any) => {
+          const lat = Number(p?.latitude ?? p?.lat);
+          const lng = Number(p?.longitude ?? p?.lng);
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+          return { latitude: lat, longitude: lng };
+        })
+        .filter(Boolean) as LatLng[];
+    }
+    return [];
+  }, [routeDoc]);
+
+  const plannedPois = useMemo(() => {
+    const pois = routeDoc?.policyPack?.pois;
+    return Array.isArray(pois) ? pois : [];
+  }, [routeDoc]);
+
+  const plannedSegments = useMemo(() => {
+    const segments = routeDoc?.policyPack?.segments;
+    return Array.isArray(segments) ? segments : [];
+  }, [routeDoc]);
+
   const samplePath: LatLng[] = useMemo(
     () =>
-      (samples || [])
+      [...(samples || [])]
+        .sort((a, b) => {
+          const aMs = a?.t ? Date.parse(String(a.t)) : Number.NaN;
+          const bMs = b?.t ? Date.parse(String(b.t)) : Number.NaN;
+          if (Number.isFinite(aMs) && Number.isFinite(bMs) && aMs !== bMs) return aMs - bMs;
+          const aSeq = Number(a?.seq);
+          const bSeq = Number(b?.seq);
+          if (Number.isFinite(aSeq) && Number.isFinite(bSeq) && aSeq !== bSeq) return aSeq - bSeq;
+          return 0;
+        })
         .map((sample) => sample?.pos)
         .filter((point) => point && Number.isFinite(Number(point.latitude)) && Number.isFinite(Number(point.longitude))),
     [samples]
@@ -191,7 +226,15 @@ export default function TripDetailPage() {
       ) : null}
 
       <div style={{ marginTop: 14 }}>
-        <TripPlaybackMap routePath={routePath} samplePath={samplePath} events={events} />
+        <TripPlaybackMap
+          routePath={routePath}
+          samplePath={samplePath}
+          events={events}
+          samples={samples}
+          plannedPois={plannedPois}
+          plannedSegments={plannedSegments}
+          segmentBasePath={policyRoutePath}
+        />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 14 }}>
