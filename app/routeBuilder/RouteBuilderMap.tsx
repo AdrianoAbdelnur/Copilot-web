@@ -3,6 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { loadGoogleMaps } from "@/lib/gmaps/loader";
 import RouteBuilderSidebar from "./RouteBuilderSidebar";
+import MapUndoOverlay from "./components/MapUndoOverlay";
+import usePlacesAutocomplete from "./hooks/usePlacesAutocomplete";
+import useClickDrawRoute from "./hooks/useClickDrawRoute";
 
 export default function RouteBuilderMap() {
   const mapDivRef = useRef<HTMLDivElement | null>(null);
@@ -12,7 +15,12 @@ export default function RouteBuilderMap() {
   const directionsChangedListenerRef = useRef<any>(null);
   const routeHistoryRef = useRef<any[]>([]);
   const isApplyingHistoryRef = useRef(false);
+  const isClickDrawingRef = useRef(false);
   const routeMarkersRef = useRef<any[]>([]);
+  const clickDrawMarkersRef = useRef<any[]>([]);
+  const clickDrawStartRef = useRef<any>(null);
+  const clickDrawStopsRef = useRef<Array<{ position: any; kind: "anchor" | "waypoint" }>>([]);
+  const clickDrawEndRef = useRef<any>(null);
   const endpointPreviewMarkersRef = useRef<{ origin: any | null; destination: any | null }>({
     origin: null,
     destination: null,
@@ -26,12 +34,6 @@ export default function RouteBuilderMap() {
   const originInputRef = useRef<HTMLInputElement | null>(null);
   const destinationInputRef = useRef<HTMLInputElement | null>(null);
   const waypointInputRefs = useRef<Array<HTMLInputElement | null>>([]);
-  const originAutocompleteRef = useRef<any>(null);
-  const destinationAutocompleteRef = useRef<any>(null);
-  const waypointAutocompletesRef = useRef<any[]>([]);
-  const waypointAutocompleteListenersRef = useRef<any[]>([]);
-  const originAutocompleteListenerRef = useRef<any>(null);
-  const destinationAutocompleteListenerRef = useRef<any>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error" | "missing-key">("loading");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [origin, setOrigin] = useState("");
@@ -40,6 +42,13 @@ export default function RouteBuilderMap() {
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeError, setRouteError] = useState("");
   const [canUndoRouteEdit, setCanUndoRouteEdit] = useState(false);
+  const [isClickDrawing, setIsClickDrawing] = useState(false);
+  const [isMapReady, setIsMapReady] = useState(false);
+
+  const setClickDrawingMode = (value: boolean) => {
+    isClickDrawingRef.current = value;
+    setIsClickDrawing(value);
+  };
 
   const clearEndpointPreviewMarker = (kind: "origin" | "destination") => {
     endpointPreviewMarkersRef.current[kind]?.setMap?.(null);
@@ -53,6 +62,78 @@ export default function RouteBuilderMap() {
     if (last === result) return;
     routeHistoryRef.current.push(result);
     setCanUndoRouteEdit(routeHistoryRef.current.length > 1);
+  };
+
+  const clearRouteMarkers = () => {
+    for (const marker of routeMarkersRef.current) marker?.setMap?.(null);
+    routeMarkersRef.current = [];
+  };
+
+  const resetRouteHistory = () => {
+    routeHistoryRef.current = [];
+    setCanUndoRouteEdit(false);
+  };
+
+  const clearClickDrawMarkers = () => {
+    for (const marker of clickDrawMarkersRef.current) marker?.setMap?.(null);
+    clickDrawMarkersRef.current = [];
+  };
+
+  const renderClickDrawMarkers = () => {
+    const map = mapRef.current;
+    if (!map || !window.google?.maps) return;
+
+    clearClickDrawMarkers();
+
+    const addMarker = (
+      position: any,
+      labelText: string,
+      color: string,
+      zIndex: number,
+      scale = 9,
+      fillOpacity = 1,
+    ) => {
+      if (!position) return;
+      const markerOptions: any = {
+        map,
+        position,
+        icon: {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          scale,
+          fillColor: color,
+          fillOpacity,
+          strokeColor: "#0f172a",
+          strokeWeight: 1,
+        },
+        zIndex,
+      };
+      if (labelText) {
+        markerOptions.label = { text: labelText, color: "#ffffff", fontWeight: "700" };
+      }
+      const marker = new window.google.maps.Marker(markerOptions);
+
+      if (labelText === "B") {
+        marker.addListener?.("dblclick", (e: any) => {
+          e?.domEvent?.preventDefault?.();
+          e?.domEvent?.stopPropagation?.();
+          promoteCurrentBToWaypointAndResume();
+        });
+      }
+      clickDrawMarkersRef.current.push(marker);
+    };
+
+    addMarker(clickDrawStartRef.current, "A", "#16a34a", 1200, 10);
+    let waypointNumber = 1;
+    clickDrawStopsRef.current.forEach((stop, i) => {
+      if (!stop?.position) return;
+      if (stop.kind === "waypoint") {
+        addMarker(stop.position, String(waypointNumber), "#2563eb", 1190 - i, 8);
+        waypointNumber += 1;
+        return;
+      }
+      addMarker(stop.position, "", "#f59e0b", 1185 - i, 6, 0.6);
+    });
+    if (clickDrawEndRef.current) addMarker(clickDrawEndRef.current, "B", "#dc2626", 1180, 10);
   };
 
   const fitPreviewPointsOrFocus = (fallbackPosition?: any) => {
@@ -162,6 +243,68 @@ export default function RouteBuilderMap() {
     });
   };
 
+  usePlacesAutocomplete({
+    status,
+    originInputRef,
+    destinationInputRef,
+    waypointInputRefs,
+    waypointCount: waypoints.length,
+    onOriginSelected: (value, pos) => {
+      setOrigin(value);
+      if (pos) drawEndpointPreviewMarker("origin", pos);
+    },
+    onDestinationSelected: (value, pos) => {
+      setDestination(value);
+      if (pos) drawEndpointPreviewMarker("destination", pos);
+    },
+    onWaypointSelected: (index, value, pos) => {
+      setWaypoints((prev) => prev.map((item, i) => (i === index ? value : item)));
+      if (pos) drawWaypointPreviewMarker(index, pos);
+    },
+  });
+
+  const clearRenderedDirections = () => {
+    const renderer = directionsRendererRef.current;
+    if (!renderer) return;
+    try {
+      renderer.set("directions", null);
+    } catch {
+      try {
+        renderer.setDirections?.({ routes: [] });
+      } catch {
+        console.log("[RouteBuilder] clearRenderedDirections failed");
+      }
+    }
+  };
+
+  const hasRenderedRoute = () => {
+    const directions = directionsRendererRef.current?.getDirections?.();
+    return Array.isArray(directions?.routes) && directions.routes.length > 0;
+  };
+
+  const { resetClickDrawState, promoteCurrentBToWaypointAndResume } = useClickDrawRoute({
+    status,
+    mapReady: isMapReady,
+    mapRef,
+    directionsServiceRef,
+    directionsRendererRef,
+    isApplyingHistoryRef,
+    isClickDrawingRef,
+    setClickDrawingMode,
+    clickDrawStartRef,
+    clickDrawStopsRef,
+    clickDrawEndRef,
+    getSidebarOriginPosition: () => endpointPreviewPositionsRef.current.origin,
+    clearRenderedDirections,
+    clearRouteMarkers,
+    resetRouteHistory,
+    pushRouteHistory,
+    hidePreviewMarkersVisuals,
+    renderClickDrawMarkers,
+    hasRenderedRoute,
+    setRouteError,
+  });
+
   useEffect(() => {
     const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY;
     if (!key) {
@@ -198,6 +341,7 @@ export default function RouteBuilderMap() {
       center: { lat: -26.8318, lng: -65.2194 },
       zoom: 7,
       mapTypeId: "roadmap",
+      disableDoubleClickZoom: true,
     });
 
     directionsServiceRef.current = new window.google.maps.DirectionsService();
@@ -214,7 +358,14 @@ export default function RouteBuilderMap() {
       pushRouteHistory(result);
       drawRouteMarkers(result);
     });
+
+    setIsMapReady(true);
   }, [status]);
+
+  useEffect(() => {
+    if (!directionsRendererRef.current) return;
+    directionsRendererRef.current.setOptions?.({ draggable: !isClickDrawing });
+  }, [isClickDrawing]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -244,75 +395,16 @@ export default function RouteBuilderMap() {
 
   useEffect(() => {
     return () => {
-      for (const marker of routeMarkersRef.current) marker?.setMap?.(null);
+      clearRouteMarkers();
+      clearClickDrawMarkers();
       clearEndpointPreviewMarker("origin");
       clearEndpointPreviewMarker("destination");
       for (let i = 0; i < waypointPreviewMarkersRef.current.length; i += 1) clearWaypointPreviewMarker(i);
       directionsChangedListenerRef.current?.remove?.();
       directionsRendererRef.current?.setMap?.(null);
-      originAutocompleteListenerRef.current?.remove?.();
-      destinationAutocompleteListenerRef.current?.remove?.();
-      for (const listener of waypointAutocompleteListenersRef.current) listener?.remove?.();
+      setIsMapReady(false);
     };
   }, []);
-
-  useEffect(() => {
-    if (status !== "ready") return;
-    if (!window.google?.maps?.places?.Autocomplete) return;
-    if (!originInputRef.current || !destinationInputRef.current) return;
-
-    if (!originAutocompleteRef.current) {
-      originAutocompleteRef.current = new window.google.maps.places.Autocomplete(originInputRef.current, {
-        fields: ["formatted_address", "geometry", "name"],
-      });
-      originAutocompleteListenerRef.current = originAutocompleteRef.current.addListener("place_changed", () => {
-        const place = originAutocompleteRef.current?.getPlace?.();
-        const value = place?.formatted_address || place?.name || originInputRef.current?.value || "";
-        setOrigin(value);
-        const pos = place?.geometry?.location;
-        if (pos) drawEndpointPreviewMarker("origin", pos);
-      });
-    }
-
-    if (!destinationAutocompleteRef.current) {
-      destinationAutocompleteRef.current = new window.google.maps.places.Autocomplete(destinationInputRef.current, {
-        fields: ["formatted_address", "geometry", "name"],
-      });
-      destinationAutocompleteListenerRef.current = destinationAutocompleteRef.current.addListener("place_changed", () => {
-        const place = destinationAutocompleteRef.current?.getPlace?.();
-        const value = place?.formatted_address || place?.name || destinationInputRef.current?.value || "";
-        setDestination(value);
-        const pos = place?.geometry?.location;
-        if (pos) drawEndpointPreviewMarker("destination", pos);
-      });
-    }
-  }, [status]);
-
-  useEffect(() => {
-    if (status !== "ready") return;
-    if (!window.google?.maps?.places?.Autocomplete) return;
-
-    for (const listener of waypointAutocompleteListenersRef.current) listener?.remove?.();
-    waypointAutocompleteListenersRef.current = [];
-    waypointAutocompletesRef.current = [];
-
-    waypointInputRefs.current.forEach((inputEl, index) => {
-      if (!inputEl) return;
-      const ac = new window.google.maps.places.Autocomplete(inputEl, {
-        fields: ["formatted_address", "geometry", "name"],
-      });
-      const listener = ac.addListener("place_changed", () => {
-        const place = ac.getPlace?.();
-        const value = place?.formatted_address || place?.name || inputEl.value || "";
-        setWaypoints((prev) => prev.map((item, i) => (i === index ? value : item)));
-        const pos = place?.geometry?.location;
-        if (pos) drawWaypointPreviewMarker(index, pos);
-      });
-
-      waypointAutocompletesRef.current.push(ac);
-      waypointAutocompleteListenersRef.current.push(listener);
-    });
-  }, [status, waypoints.length]);
 
   const setWaypointAt = (index: number, value: string) => {
     setWaypoints((prev) => prev.map((item, i) => (i === index ? value : item)));
@@ -370,12 +462,12 @@ export default function RouteBuilderMap() {
   };
 
   const clearRoute = () => {
-    directionsRendererRef.current?.setDirections?.({ routes: [] });
-    for (const marker of routeMarkersRef.current) marker?.setMap?.(null);
-    routeMarkersRef.current = [];
+    clearRenderedDirections();
+    clearRouteMarkers();
+    clearClickDrawMarkers();
+    resetClickDrawState();
     restorePreviewMarkersVisuals();
-    routeHistoryRef.current = [];
-    setCanUndoRouteEdit(false);
+    resetRouteHistory();
     setRouteError("");
   };
 
@@ -415,49 +507,86 @@ export default function RouteBuilderMap() {
 
     hidePreviewMarkersVisuals();
 
-    for (const marker of routeMarkersRef.current) marker?.setMap?.(null);
-    routeMarkersRef.current = [];
+    clearRouteMarkers();
 
     const route = result?.routes?.[0];
     const legs = Array.isArray(route?.legs) ? route.legs : [];
     if (legs.length === 0) return;
+    const requestWaypoints = Array.isArray(result?.request?.waypoints) ? result.request.waypoints : [];
+    const hasDragAnchors = legs.some(
+      (leg: any) => Array.isArray(leg?.via_waypoints) && leg.via_waypoints.length > 0,
+    );
 
-    const points = [
-      { kind: "origin" as const, position: legs[0]?.start_location },
-      ...legs.map((leg: any, index: number) => ({
-        kind: index === legs.length - 1 ? ("destination" as const) : ("waypoint" as const),
-        position: leg?.end_location,
-      })),
+    const points: Array<{ kind: "origin" | "destination" | "waypoint" | "anchor"; position: any }> = [
+      { kind: "origin", position: legs[0]?.start_location },
+      ...legs.map((leg: any, index: number) => {
+        if (index === legs.length - 1) return { kind: "destination" as const, position: leg?.end_location };
+        if (hasDragAnchors) return { kind: "anchor" as const, position: leg?.end_location };
+        const requestWaypoint = requestWaypoints[index];
+        // In draggable edits, Google can add intermediate legs without exposing matching request.waypoints.
+        // Be conservative: only draw a numbered waypoint when we can positively identify a stopover.
+        const isStopover = requestWaypoint ? requestWaypoint.stopover !== false : false;
+        return {
+          kind: isStopover ? ("waypoint" as const) : ("anchor" as const),
+          position: leg?.end_location,
+        };
+      }),
     ];
+
+    let waypointNumber = 1;
 
     for (let i = 0; i < points.length; i += 1) {
       const item = points[i];
       if (!item?.position) continue;
+      if (hasDragAnchors && item.kind === "anchor") continue;
 
       const color =
-        item.kind === "origin" ? "#16a34a" : item.kind === "destination" ? "#dc2626" : "#2563eb";
+        item.kind === "origin"
+          ? "#16a34a"
+          : item.kind === "destination"
+            ? "#dc2626"
+            : item.kind === "waypoint"
+              ? "#2563eb"
+              : "#f59e0b";
 
-      const label =
-        item.kind === "origin" ? "A" : item.kind === "destination" ? "B" : String(i);
+      let label = "";
+      if (item.kind === "origin") label = "A";
+      else if (item.kind === "destination") label = "B";
+      else if (item.kind === "waypoint") {
+        label = String(waypointNumber);
+        waypointNumber += 1;
+      }
 
       const marker = new window.google.maps.Marker({
         map,
         position: item.position,
-        label: {
-          text: label,
-          color: "#ffffff",
-          fontWeight: "700",
-        },
+        ...(label
+          ? {
+              label: {
+                text: label,
+                color: "#ffffff",
+                fontWeight: "700",
+              },
+            }
+          : {}),
         icon: {
           path: window.google.maps.SymbolPath.CIRCLE,
-          scale: 10,
+          scale: item.kind === "anchor" ? 7 : 10,
           fillColor: color,
-          fillOpacity: 1,
+          fillOpacity: item.kind === "anchor" ? 0.6 : 1,
           strokeColor: "#0f172a",
           strokeWeight: 1,
         },
         zIndex: 1000 + i,
       });
+
+      if (item.kind === "destination") {
+        marker.addListener?.("dblclick", (e: any) => {
+          e?.domEvent?.preventDefault?.();
+          e?.domEvent?.stopPropagation?.();
+          promoteCurrentBToWaypointAndResume();
+        });
+      }
 
       routeMarkersRef.current.push(marker);
     }
@@ -487,7 +616,9 @@ export default function RouteBuilderMap() {
 
       const result = await directionsServiceRef.current.route(request);
       directionsRendererRef.current?.setDirections?.(result);
-      routeHistoryRef.current = [];
+      clearClickDrawMarkers();
+      resetClickDrawState();
+      resetRouteHistory();
       pushRouteHistory(result);
       drawRouteMarkers(result);
     } catch {
@@ -546,50 +677,7 @@ export default function RouteBuilderMap() {
       />
 
       <div style={{ position: "relative", zIndex: 1, minWidth: 0, background: "#e2e8f0" }}>
-        {canUndoRouteEdit ? (
-          <button
-            type="button"
-            onClick={undoRouteEdit}
-            style={{
-              position: "absolute",
-              top: "50%",
-              right: 10,
-              transform: "translateY(-50%)",
-              zIndex: 5,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "7px 11px",
-              borderRadius: 999,
-              border: "1px solid #cbd5e1",
-              background: "rgba(255,255,255,0.98)",
-              color: "#0f172a",
-              fontSize: 12,
-              fontWeight: 600,
-              boxShadow: "0 6px 18px rgba(15,23,42,0.14)",
-              backdropFilter: "blur(4px)",
-              cursor: "pointer",
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path
-                d="M9 8H5v4"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M5 12c1.6-3 4.4-4.5 7.6-4.5 4.4 0 7.9 3.1 7.9 7.6S17 22 12.6 22c-2.7 0-4.8-1-6.3-2.6"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            Deshacer
-          </button>
-        ) : null}
+        <MapUndoOverlay visible={canUndoRouteEdit} onUndo={undoRouteEdit} />
         <div ref={mapDivRef} style={{ width: "100%", height: "100%" }} />
       </div>
     </div>
