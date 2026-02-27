@@ -96,6 +96,7 @@ export default function RouteBuilderMap() {
       zIndex: number,
       scale = 9,
       fillOpacity = 1,
+      onClick?: (event?: any) => void,
     ) => {
       if (!position) return;
       const markerOptions: any = {
@@ -123,6 +124,13 @@ export default function RouteBuilderMap() {
           promoteCurrentBToWaypointAndResume();
         });
       }
+      if (onClick) {
+        marker.addListener?.("click", (e: any) => {
+          e?.domEvent?.preventDefault?.();
+          e?.domEvent?.stopPropagation?.();
+          onClick(e);
+        });
+      }
       clickDrawMarkersRef.current.push(marker);
     };
 
@@ -135,7 +143,7 @@ export default function RouteBuilderMap() {
         waypointNumber += 1;
         return;
       }
-      addMarker(stop.position, "", "#f59e0b", 1185 - i, 6, 0.6);
+      addMarker(stop.position, "", "#f59e0b", 1185 - i, 6, 0.6, () => removeAnchorAt(i));
     });
     if (clickDrawEndRef.current) addMarker(clickDrawEndRef.current, "B", "#dc2626", 1180, 10);
   };
@@ -454,7 +462,7 @@ export default function RouteBuilderMap() {
     })();
   };
 
-  const { resetClickDrawState, promoteCurrentBToWaypointAndResume } = useClickDrawRoute({
+  const { resetClickDrawState, promoteCurrentBToWaypointAndResume, removeAnchorAt } = useClickDrawRoute({
     status,
     mapReady: isMapReady,
     mapRef,
@@ -516,6 +524,7 @@ export default function RouteBuilderMap() {
       zoom: 7,
       mapTypeId: "roadmap",
       disableDoubleClickZoom: true,
+      clickableIcons: false,
     });
 
     directionsServiceRef.current = new window.google.maps.DirectionsService();
