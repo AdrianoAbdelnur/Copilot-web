@@ -13,6 +13,9 @@ export default function RouteBuilderMap() {
   const directionsServiceRef = useRef<any>(null);
   const directionsRendererRef = useRef<any>(null);
   const directionsChangedListenerRef = useRef<any>(null);
+  const geocoderRef = useRef<any>(null);
+  const geocodeCacheRef = useRef<Map<string, string>>(new Map());
+  const geocodeRequestIdRef = useRef(0);
   const routeHistoryRef = useRef<any[]>([]);
   const isApplyingHistoryRef = useRef(false);
   const isClickDrawingRef = useRef(false);
@@ -21,6 +24,7 @@ export default function RouteBuilderMap() {
   const clickDrawStartRef = useRef<any>(null);
   const clickDrawStopsRef = useRef<Array<{ position: any; kind: "anchor" | "waypoint" }>>([]);
   const clickDrawEndRef = useRef<any>(null);
+  const clickDrawWaypointLabelsRef = useRef<string[]>([]);
   const endpointPreviewMarkersRef = useRef<{ origin: any | null; destination: any | null }>({
     origin: null,
     destination: null,
@@ -282,6 +286,174 @@ export default function RouteBuilderMap() {
     return Array.isArray(directions?.routes) && directions.routes.length > 0;
   };
 
+  const getLatLngLiteral = (position: any) => {
+    if (!position) return null;
+    const lat = typeof position.lat === "function" ? position.lat() : position.lat;
+    const lng = typeof position.lng === "function" ? position.lng() : position.lng;
+    if (typeof lat !== "number" || typeof lng !== "number") return null;
+    return { lat, lng };
+  };
+
+  const formatLatLngForInput = (position: any) => {
+    const literal = getLatLngLiteral(position);
+    if (!literal) return "";
+    return `${literal.lat.toFixed(6)}, ${literal.lng.toFixed(6)}`;
+  };
+
+  const isCoordinateLabel = (value: string) => {
+    const text = value.trim();
+    return /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(text);
+  };
+
+  const getLatLngCacheKey = (position: any) => {
+    const literal = getLatLngLiteral(position);
+    if (!literal) return "";
+    return `${literal.lat.toFixed(6)},${literal.lng.toFixed(6)}`;
+  };
+
+  const getGeocoder = () => {
+    if (geocoderRef.current) return geocoderRef.current;
+    if (!window.google?.maps?.Geocoder) return null;
+    geocoderRef.current = new window.google.maps.Geocoder();
+    return geocoderRef.current;
+  };
+
+  const reverseGeocodePosition = async (position: any) => {
+    if (!position) return "";
+    const cacheKey = getLatLngCacheKey(position);
+    if (cacheKey && geocodeCacheRef.current.has(cacheKey)) {
+      return geocodeCacheRef.current.get(cacheKey) || "";
+    }
+
+    const fallback = formatLatLngForInput(position);
+    const geocoder = getGeocoder();
+    const location = getLatLngLiteral(position);
+    if (!geocoder || !location) return fallback;
+
+    try {
+      const response = await geocoder.geocode({ location });
+      const label = response?.results?.[0]?.formatted_address || fallback;
+      if (cacheKey) geocodeCacheRef.current.set(cacheKey, label);
+      return label;
+    } catch {
+      if (cacheKey) geocodeCacheRef.current.set(cacheKey, fallback);
+      return fallback;
+    }
+  };
+
+  const syncSidebarFromClickDraw = (
+    resolveAddresses = false,
+    routeResult?: any,
+    promotedDestinationLabel = "",
+    promotedDestinationPosition?: any,
+  ) => {
+    const start = clickDrawStartRef.current;
+    const end = clickDrawEndRef.current;
+    const allStops = clickDrawStopsRef.current.filter((stop) => stop?.position);
+    const waypointStops = allStops.filter((stop) => stop.kind === "waypoint");
+
+    endpointPreviewPositionsRef.current.origin = start || null;
+    endpointPreviewPositionsRef.current.destination = end || null;
+    waypointPreviewPositionsRef.current = waypointStops.map((stop) => stop.position);
+
+    if (!resolveAddresses) {
+      const waypointFallbacks = waypointStops.map((stop) => formatLatLngForInput(stop.position)).filter(Boolean);
+      setWaypoints((prev) => {
+        const next: string[] = [];
+        for (let i = 0; i < waypointFallbacks.length; i += 1) {
+          const previousValue = prev[i]?.trim();
+          const rememberedValue = clickDrawWaypointLabelsRef.current[i]?.trim();
+          if (previousValue && !isCoordinateLabel(previousValue)) {
+            next.push(previousValue);
+            continue;
+          }
+          if (rememberedValue && !isCoordinateLabel(rememberedValue)) {
+            next.push(rememberedValue);
+            continue;
+          }
+          if (!end && i === waypointFallbacks.length - 1) {
+            const previousDestination = (promotedDestinationLabel || destination).trim();
+            if (previousDestination && !isCoordinateLabel(previousDestination)) {
+              next.push(previousDestination);
+              continue;
+            }
+          }
+          next.push(waypointFallbacks[i]);
+        }
+        clickDrawWaypointLabelsRef.current = next;
+        return next;
+      });
+      if (!end) setDestination("");
+      if (!end && promotedDestinationPosition) {
+        const promotedLabel = promotedDestinationLabel.trim();
+        if (promotedLabel && !isCoordinateLabel(promotedLabel)) {
+          setWaypoints((prev) => {
+            if (prev.length === 0) return prev;
+            const next = [...prev];
+            const lastIndex = next.length - 1;
+            next[lastIndex] = promotedLabel;
+            clickDrawWaypointLabelsRef.current = next;
+            return next;
+          });
+        } else {
+          void (async () => {
+            const resolved = (await reverseGeocodePosition(promotedDestinationPosition)).trim();
+            if (!resolved || isCoordinateLabel(resolved)) return;
+            setWaypoints((prev) => {
+              if (prev.length === 0) return prev;
+              const next = [...prev];
+              const lastIndex = next.length - 1;
+              next[lastIndex] = resolved;
+              clickDrawWaypointLabelsRef.current = next;
+              return next;
+            });
+          })();
+        }
+      }
+      return;
+    }
+
+    setOrigin(start ? formatLatLngForInput(start) : "");
+    setDestination(end ? formatLatLngForInput(end) : "");
+    setWaypoints(waypointStops.map((stop) => formatLatLngForInput(stop.position)).filter(Boolean));
+
+    const requestId = geocodeRequestIdRef.current + 1;
+    geocodeRequestIdRef.current = requestId;
+
+    void (async () => {
+      const routeLegs = Array.isArray(routeResult?.routes?.[0]?.legs) ? routeResult.routes[0].legs : [];
+      const startAddress = routeLegs[0]?.start_address;
+      const destinationAddress = routeLegs[routeLegs.length - 1]?.end_address;
+
+      const originLabel = startAddress || (start ? await reverseGeocodePosition(start) : "");
+      const destinationLabel = destinationAddress || (end ? await reverseGeocodePosition(end) : "");
+
+      const waypointLabels: string[] = [];
+      for (let stopIndex = 0; stopIndex < allStops.length; stopIndex += 1) {
+        const stop = allStops[stopIndex];
+        if (stop.kind !== "waypoint") continue;
+        const legAddress = routeLegs[stopIndex]?.end_address;
+        if (legAddress) {
+          waypointLabels.push(legAddress);
+          continue;
+        }
+        const rememberedLabel = clickDrawWaypointLabelsRef.current[waypointLabels.length]?.trim();
+        if (rememberedLabel && !isCoordinateLabel(rememberedLabel)) {
+          waypointLabels.push(rememberedLabel);
+          continue;
+        }
+        waypointLabels.push(await reverseGeocodePosition(stop.position));
+      }
+
+      if (requestId !== geocodeRequestIdRef.current) return;
+      setOrigin(originLabel);
+      setDestination(destinationLabel);
+      const nextWaypointLabels = waypointLabels.filter(Boolean);
+      clickDrawWaypointLabelsRef.current = nextWaypointLabels;
+      setWaypoints(nextWaypointLabels);
+    })();
+  };
+
   const { resetClickDrawState, promoteCurrentBToWaypointAndResume } = useClickDrawRoute({
     status,
     mapReady: isMapReady,
@@ -295,6 +467,7 @@ export default function RouteBuilderMap() {
     clickDrawStopsRef,
     clickDrawEndRef,
     getSidebarOriginPosition: () => endpointPreviewPositionsRef.current.origin,
+    getSidebarDestinationValue: () => destination,
     clearRenderedDirections,
     clearRouteMarkers,
     resetRouteHistory,
@@ -303,6 +476,7 @@ export default function RouteBuilderMap() {
     renderClickDrawMarkers,
     hasRenderedRoute,
     setRouteError,
+    syncSidebarFromClickDraw,
   });
 
   useEffect(() => {
@@ -513,18 +687,12 @@ export default function RouteBuilderMap() {
     const legs = Array.isArray(route?.legs) ? route.legs : [];
     if (legs.length === 0) return;
     const requestWaypoints = Array.isArray(result?.request?.waypoints) ? result.request.waypoints : [];
-    const hasDragAnchors = legs.some(
-      (leg: any) => Array.isArray(leg?.via_waypoints) && leg.via_waypoints.length > 0,
-    );
 
     const points: Array<{ kind: "origin" | "destination" | "waypoint" | "anchor"; position: any }> = [
       { kind: "origin", position: legs[0]?.start_location },
       ...legs.map((leg: any, index: number) => {
         if (index === legs.length - 1) return { kind: "destination" as const, position: leg?.end_location };
-        if (hasDragAnchors) return { kind: "anchor" as const, position: leg?.end_location };
         const requestWaypoint = requestWaypoints[index];
-        // In draggable edits, Google can add intermediate legs without exposing matching request.waypoints.
-        // Be conservative: only draw a numbered waypoint when we can positively identify a stopover.
         const isStopover = requestWaypoint ? requestWaypoint.stopover !== false : false;
         return {
           kind: isStopover ? ("waypoint" as const) : ("anchor" as const),
@@ -538,7 +706,6 @@ export default function RouteBuilderMap() {
     for (let i = 0; i < points.length; i += 1) {
       const item = points[i];
       if (!item?.position) continue;
-      if (hasDragAnchors && item.kind === "anchor") continue;
 
       const color =
         item.kind === "origin"
@@ -598,6 +765,18 @@ export default function RouteBuilderMap() {
       setRouteError("Ingresa origen y destino.");
       return;
     }
+    if (!endpointPreviewPositionsRef.current.origin || !endpointPreviewPositionsRef.current.destination) {
+      setRouteError("Selecciona Inicio y Fin desde las sugerencias de direcciones.");
+      return;
+    }
+    const hasUnselectedWaypoint = waypoints.some((value, index) => {
+      if (!value.trim()) return false;
+      return !waypointPreviewPositionsRef.current[index];
+    });
+    if (hasUnselectedWaypoint) {
+      setRouteError("Selecciona cada waypoint desde las sugerencias de direcciones.");
+      return;
+    }
 
     setRouteLoading(true);
     setRouteError("");
@@ -616,13 +795,20 @@ export default function RouteBuilderMap() {
 
       const result = await directionsServiceRef.current.route(request);
       directionsRendererRef.current?.setDirections?.(result);
+      directionsRendererRef.current?.setOptions?.({ draggable: true });
       clearClickDrawMarkers();
       resetClickDrawState();
+      setClickDrawingMode(false);
       resetRouteHistory();
       pushRouteHistory(result);
       drawRouteMarkers(result);
-    } catch {
-      setRouteError("No se pudo calcular la ruta con esas direcciones.");
+    } catch (error: any) {
+      const status = error?.code || error?.status || "";
+      if (String(status).includes("NOT_FOUND")) {
+        setRouteError("Hay direcciones sin seleccionar. Elige Inicio/Waypoints/Fin desde las sugerencias.");
+      } else {
+        setRouteError("No se pudo calcular la ruta con esas direcciones.");
+      }
     } finally {
       setRouteLoading(false);
     }
