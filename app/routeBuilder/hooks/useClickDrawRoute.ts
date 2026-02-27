@@ -37,6 +37,7 @@ type UseClickDrawRouteParams = {
 type UseClickDrawRouteResult = {
   resetClickDrawState: () => void;
   promoteCurrentBToWaypointAndResume: () => void;
+  removeAnchorAt: (stopIndex: number) => void;
 };
 
 export default function useClickDrawRoute({
@@ -67,6 +68,44 @@ export default function useClickDrawRoute({
   const mapDblClickListenerRef = useRef<any>(null);
   const pendingMapClickTimeoutRef = useRef<number | null>(null);
   const ignoreMapClickUntilRef = useRef(0);
+  const routeRequestIdRef = useRef(0);
+
+  const getLatLngLiteral = (position: any) => {
+    if (!position) return null;
+    const lat = typeof position.lat === "function" ? position.lat() : position.lat;
+    const lng = typeof position.lng === "function" ? position.lng() : position.lng;
+    if (typeof lat !== "number" || typeof lng !== "number") return null;
+    return { lat, lng };
+  };
+
+  const isNearLatLng = (a: any, b: any, epsilon = 8e-5) => {
+    const p1 = getLatLngLiteral(a);
+    const p2 = getLatLngLiteral(b);
+    if (!p1 || !p2) return false;
+    return Math.abs(p1.lat - p2.lat) <= epsilon && Math.abs(p1.lng - p2.lng) <= epsilon;
+  };
+
+  const getNearestRoutePoint = (position: any, routePoints: any[]) => {
+    const target = getLatLngLiteral(position);
+    if (!target || routePoints.length === 0) return position;
+
+    let bestPoint = routePoints[0];
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    for (const point of routePoints) {
+      const p = getLatLngLiteral(point);
+      if (!p) continue;
+      const dLat = p.lat - target.lat;
+      const dLng = p.lng - target.lng;
+      const distanceSq = dLat * dLat + dLng * dLng;
+      if (distanceSq < bestDistance) {
+        bestDistance = distanceSq;
+        bestPoint = point;
+      }
+    }
+
+    return bestPoint;
+  };
 
   const clearPendingMapClick = () => {
     if (pendingMapClickTimeoutRef.current == null) return;
@@ -94,6 +133,8 @@ export default function useClickDrawRoute({
 
   const applyClickDrawRoute = async (finalizeRoute: boolean) => {
     if (!directionsServiceRef.current || !directionsRendererRef.current || !window.google?.maps) return;
+    const requestId = routeRequestIdRef.current + 1;
+    routeRequestIdRef.current = requestId;
     const start = clickDrawStartRef.current;
     const stops = [...clickDrawStopsRef.current];
     const end = clickDrawEndRef.current;
@@ -120,6 +161,7 @@ export default function useClickDrawRoute({
         waypoints: waypointStops.map((stop) => ({ location: stop.position, stopover: stop.kind === "waypoint" })),
         optimizeWaypoints: false,
       });
+      if (requestId !== routeRequestIdRef.current) return;
 
       isApplyingHistoryRef.current = true;
       directionsRendererRef.current.setDirections(result);
@@ -129,11 +171,14 @@ export default function useClickDrawRoute({
       if (firstLeg?.start_location) {
         clickDrawStartRef.current = firstLeg.start_location;
       }
-      if (Array.isArray(snappedLegs) && snappedLegs.length > 0) {
-        clickDrawStopsRef.current = clickDrawStopsRef.current.map((stop, index) => ({
+      const routePoints = Array.isArray(result?.routes?.[0]?.overview_path) ? result.routes[0].overview_path : [];
+      if (routePoints.length > 0) {
+        clickDrawStopsRef.current = stops.map((stop) => ({
           ...stop,
-          position: snappedLegs[index]?.end_location || stop.position,
+          position: getNearestRoutePoint(stop.position, routePoints),
         }));
+      } else {
+        clickDrawStopsRef.current = stops;
       }
       if (finalizeRoute) {
         const lastLeg = Array.isArray(snappedLegs) ? snappedLegs[snappedLegs.length - 1] : null;
@@ -167,6 +212,7 @@ export default function useClickDrawRoute({
 
   const resetClickDrawState = () => {
     clearPendingMapClick();
+    routeRequestIdRef.current += 1;
     clickDrawStartRef.current = null;
     clickDrawStopsRef.current = [];
     clickDrawEndRef.current = null;
@@ -175,6 +221,8 @@ export default function useClickDrawRoute({
 
   const promoteCurrentBToWaypointAndResume = () => {
     if (!clickDrawEndRef.current) return;
+    clearPendingMapClick();
+    ignoreMapClickUntilRef.current = Date.now() + 450;
     const promotedDestinationPosition = clickDrawEndRef.current;
     const promotedDestinationLabel = getSidebarDestinationValue().trim();
     clickDrawStopsRef.current = [
@@ -188,6 +236,33 @@ export default function useClickDrawRoute({
     hidePreviewMarkersVisuals();
     renderClickDrawMarkers();
     syncSidebarFromClickDraw(false, undefined, promotedDestinationLabel, promotedDestinationPosition);
+  };
+
+  const removeAnchorAt = (stopIndex: number) => {
+    if (!isClickDrawingRef.current) return;
+    if (clickDrawEndRef.current) return;
+
+    const stop = clickDrawStopsRef.current[stopIndex];
+    if (!stop || stop.kind !== "anchor") return;
+
+    clearPendingMapClick();
+    ignoreMapClickUntilRef.current = Date.now() + 300;
+
+    const nextStops = clickDrawStopsRef.current.filter((_, i) => i !== stopIndex);
+    clickDrawStopsRef.current = nextStops;
+
+    if (nextStops.length === 0) {
+      clearRenderedDirections();
+      clearRouteMarkers();
+      hidePreviewMarkersVisuals();
+      renderClickDrawMarkers();
+      syncSidebarFromClickDraw(false);
+      return;
+    }
+
+    renderClickDrawMarkers();
+    syncSidebarFromClickDraw(false);
+    void applyClickDrawRoute(false);
   };
 
   useEffect(() => {
@@ -222,7 +297,7 @@ export default function useClickDrawRoute({
         renderClickDrawMarkers();
         syncSidebarFromClickDraw(false);
         void applyClickDrawRoute(false);
-      }, 220);
+      }, 360);
     });
 
     mapDblClickListenerRef.current = mapRef.current.addListener("dblclick", (e: any) => {
@@ -233,6 +308,14 @@ export default function useClickDrawRoute({
 
       const latLng = e?.latLng;
       if (!latLng) return;
+
+      // Promote B even if marker dblclick does not fire first (event ordering can vary).
+      if (!isClickDrawingRef.current && clickDrawEndRef.current) {
+        if (isNearLatLng(latLng, clickDrawEndRef.current)) {
+          promoteCurrentBToWaypointAndResume();
+          return;
+        }
+      }
 
       if (!clickDrawStartRef.current || !isClickDrawingRef.current) {
         beginClickDrawFrom(latLng);
@@ -259,5 +342,6 @@ export default function useClickDrawRoute({
   return {
     resetClickDrawState,
     promoteCurrentBToWaypointAndResume,
+    removeAnchorAt,
   };
 }

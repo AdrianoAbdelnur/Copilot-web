@@ -47,9 +47,9 @@ function IconButton({
         width: 26,
         height: 26,
         borderRadius: 6,
-        border: "1px solid #dbe0e6",
-        background: disabled ? "#f8fafc" : "#fff",
-        color: danger ? "#b91c1c" : disabled ? "#94a3b8" : "#334155",
+        border: "1px solid var(--border)",
+        background: disabled ? "color-mix(in srgb, var(--surface) 88%, var(--background) 12%)" : "var(--surface)",
+        color: danger ? "var(--danger)" : disabled ? "var(--muted)" : "var(--foreground)",
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
@@ -125,8 +125,8 @@ export default function RouteBuilderSidebar({
     return (
       <aside
         style={{
-          borderRight: "1px solid #ddd",
-          background: "#fff",
+          borderRight: "1px solid var(--border)",
+          background: "var(--surface)",
           position: "relative",
           zIndex: 3,
           height: "100%",
@@ -136,12 +136,12 @@ export default function RouteBuilderSidebar({
           alignItems: "start",
         }}
       >
-        <div style={{ display: "flex", justifyContent: "center", padding: 8, borderBottom: "1px solid #eee" }}>
+        <div style={{ display: "flex", justifyContent: "center", padding: 8, borderBottom: "1px solid var(--border)" }}>
           <IconButton title="Mostrar panel" onClick={onToggleCollapsed}>
             <PanelChevronIcon collapsed />
           </IconButton>
         </div>
-        <div style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", fontSize: 11, color: "#64748b", padding: "8px 0", textAlign: "center" }}>
+        <div style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", fontSize: 11, color: "var(--muted)", padding: "8px 0", textAlign: "center" }}>
           Route Builder
         </div>
       </aside>
@@ -151,8 +151,8 @@ export default function RouteBuilderSidebar({
   return (
     <aside
       style={{
-        borderRight: "1px solid #ddd",
-        background: "#fff",
+        borderRight: "1px solid var(--border)",
+        background: "var(--surface)",
         position: "relative",
         zIndex: 3,
         display: "grid",
@@ -161,11 +161,11 @@ export default function RouteBuilderSidebar({
         minHeight: 0,
       }}
     >
-      <div style={{ padding: 10, borderBottom: "1px solid #eee" }}>
+      <div style={{ padding: 10, borderBottom: "1px solid var(--border)" }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
           <div>
-            <div style={{ fontSize: 16, lineHeight: 1.15, marginBottom: 4, color: "#0f172a", fontWeight: 600 }}>Mapa sin titulo</div>
-            <div style={{ fontSize: 11, color: "#64748b" }}>{statusLabel}</div>
+            <div style={{ fontSize: 16, lineHeight: 1.15, marginBottom: 4, color: "var(--foreground)", fontWeight: 600 }}>Mapa sin titulo</div>
+            <div style={{ fontSize: 11, color: "var(--muted)" }}>{statusLabel}</div>
           </div>
           <IconButton title="Ocultar panel" onClick={onToggleCollapsed}>
             <PanelChevronIcon collapsed={false} />
@@ -174,8 +174,8 @@ export default function RouteBuilderSidebar({
       </div>
 
       <div style={{ padding: 8, display: "grid", alignContent: "start", gap: 8, overflowY: "auto", minHeight: 0 }}>
-        <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 8, background: "#fff" }}>
-          <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>Inicio</div>
+        <div style={{ border: "1px solid var(--border)", borderRadius: 8, padding: 8, background: "var(--surface)" }}>
+          <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>Inicio</div>
           <input
             ref={originInputRef}
             value={origin}
@@ -185,7 +185,7 @@ export default function RouteBuilderSidebar({
               width: "100%",
               padding: "6px 8px",
               borderRadius: 6,
-              border: "1px solid #ddd",
+              border: "1px solid var(--border)",
               background: "var(--surface)",
               color: "var(--foreground)",
               fontSize: 13,
@@ -194,9 +194,9 @@ export default function RouteBuilderSidebar({
         </div>
 
         {waypoints.map((value, index) => (
-          <div key={index} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 8, background: "#fff" }}>
+          <div key={index} style={{ border: "1px solid var(--border)", borderRadius: 8, padding: 8, background: "var(--surface)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
-              <div style={{ fontSize: 11, color: "#64748b" }}>Waypoint {index + 1}</div>
+              <div style={{ fontSize: 11, color: "var(--muted)" }}>Waypoint {index + 1}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <IconButton title="Subir waypoint" onClick={() => onMoveWaypointUp(index)} disabled={index === 0}>
                   <ChevronUpIcon />
@@ -222,7 +222,7 @@ export default function RouteBuilderSidebar({
                 style={{
                   padding: "6px 8px",
                   borderRadius: 6,
-                  border: "1px solid #ddd",
+                  border: "1px solid var(--border)",
                   background: "var(--surface)",
                   color: "var(--foreground)",
                   fontSize: 13,
@@ -251,8 +251,8 @@ export default function RouteBuilderSidebar({
           + Agregar waypoint
         </button>
 
-        <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 8, background: "#fff" }}>
-          <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>Fin</div>
+        <div style={{ border: "1px solid var(--border)", borderRadius: 8, padding: 8, background: "var(--surface)" }}>
+          <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>Fin</div>
           <input
             ref={destinationInputRef}
             value={destination}
@@ -262,7 +262,7 @@ export default function RouteBuilderSidebar({
               width: "100%",
               padding: "6px 8px",
               borderRadius: 6,
-              border: "1px solid #ddd",
+              border: "1px solid var(--border)",
               background: "var(--surface)",
               color: "var(--foreground)",
               fontSize: 13,
@@ -293,7 +293,7 @@ export default function RouteBuilderSidebar({
             style={{
               padding: "7px 10px",
               borderRadius: 6,
-              border: "1px solid #ddd",
+              border: "1px solid var(--border)",
               background: "var(--surface)",
               color: "var(--foreground)",
               fontSize: 12,
