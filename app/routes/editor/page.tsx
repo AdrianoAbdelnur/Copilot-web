@@ -843,22 +843,22 @@ export default function RoutesPage() {
           ) : (
             <>
               <Card>
-                <CardHeader className="space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <CardTitle>{selected?.title || t.selectRoute}</CardTitle>
-                    <div className="flex flex-wrap gap-2">
-                      {/* <Button onClick={duplicateSelected}>{t.duplicate}</Button> */}
-                      {/* <Button onClick={exportSelected}>{t.export}</Button> */}
-                      <Button variant="primary" onClick={runFullProcess} disabled={runningPipeline || !selectedId}>
-                        {runningPipeline ? "Procesando ruta..." : "Procesar ruta"}
-                      </Button>
-                    </div>
-                  </div>
+                <CardHeader>
+                  <CardTitle>{selected?.title || t.selectRoute}</CardTitle>
                 </CardHeader>
 
-                <CardContent className="grid gap-4">
-                  <>
-                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                <CardContent className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)] lg:items-start">
+                  <div className="grid gap-3 lg:sticky lg:top-4">
+                    <Button
+                      variant="primary"
+                      onClick={runFullProcess}
+                      disabled={runningPipeline || !selectedId}
+                      className="h-12 w-full text-base font-extrabold shadow-lg shadow-slate-900/30"
+                    >
+                      {runningPipeline ? "Procesando ruta..." : "Procesar ruta"}
+                    </Button>
+
+                    <div className="grid grid-cols-2 gap-2">
                       <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
                         <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{t.statClusters}</div>
                         <div className="mt-0.5 text-lg font-bold text-slate-900">{clusters.length}</div>
@@ -877,11 +877,11 @@ export default function RoutesPage() {
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-1">
+                    <div className="grid gap-2">
+                      <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
                         <span className="text-xs text-slate-500">{t.gapIdx}</span>
                         <Input
-                          className="h-8 w-16"
+                          className="h-8 w-20"
                           value={gapIdx}
                           onChange={(e) => setGapIdx(Math.max(1, Number(e.target.value) || 1))}
                         />
@@ -890,13 +890,14 @@ export default function RoutesPage() {
                         <Button
                           variant="secondary"
                           onClick={() => router.push(`/routes/marks?routeId=${selectedId}`)}
+                          className="w-full"
                         >
                           {t.actions.openMapEditor}
                         </Button>
                       ) : null}
                     </div>
 
-                    <div className="grid gap-1 text-xs text-slate-600">
+                    <div className="grid gap-1 rounded-md border border-slate-200 bg-slate-50 p-2 text-xs text-slate-600">
                       {compileMsg ? <div>{compileMsg}</div> : null}
                       {matchMsg ? <div>{matchMsg}</div> : null}
                       {diagnoseMsg ? <div>{diagnoseMsg}</div> : null}
@@ -906,18 +907,21 @@ export default function RoutesPage() {
                     </div>
 
                     {clusters.length > 0 ? (
-                      <div className="flex flex-wrap gap-2">
-                        {clusters.slice(0, 30).map((c) => (
-                          <Button
-                            key={c.i}
-                            size="sm"
-                            variant={c.i === selectedClusterIdx ? "primary" : "secondary"}
-                            onClick={() => onPickCluster(c.i)}
-                            title={`worst=${Math.round(c.worstErrorM)}m count=${c.count}`}
-                          >
-                            #{c.i} ({c.count})
-                          </Button>
-                        ))}
+                      <div className="rounded-md border border-slate-200 bg-slate-50 p-2">
+                        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Clusters</div>
+                        <div className="flex max-h-40 flex-wrap gap-2 overflow-auto">
+                          {clusters.slice(0, 30).map((c) => (
+                            <Button
+                              key={c.i}
+                              size="sm"
+                              variant={c.i === selectedClusterIdx ? "primary" : "secondary"}
+                              onClick={() => onPickCluster(c.i)}
+                              title={`worst=${Math.round(c.worstErrorM)}m count=${c.count}`}
+                            >
+                              #{c.i} ({c.count})
+                            </Button>
+                          ))}
+                        </div>
                       </div>
                     ) : null}
 
@@ -926,7 +930,9 @@ export default function RoutesPage() {
                         {t.selectedPlan} #{selectedPlanInfo.clusterIdx} | {t.waypoints}={selectedPlanInfo.wp} | {t.stepsFromTo} {selectedPlanInfo.stepStart} a {selectedPlanInfo.stepEnd}
                       </div>
                     ) : null}
+                  </div>
 
+                  <div className="min-w-0">
                     <RouteMapViewer
                       policyRoute={selected?.policyPack?.route ?? []}
                       googleOriginal={
@@ -943,7 +949,7 @@ export default function RoutesPage() {
                       patchedSegments={patchedSegments}
                       mergedGoogle={merged}
                     />
-                  </>
+                  </div>
                 </CardContent>
               </Card>
             </>

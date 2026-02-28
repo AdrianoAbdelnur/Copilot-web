@@ -65,12 +65,38 @@ export default function AuthSessionHeader() {
     router.replace("/login");
   };
 
+  const getTreeParent = (path: string) => {
+    if (!path || path === "/") return null;
+
+    // Routes tree: home -> routes -> route tools (editor/marks/create)
+    if (path === "/routes") return "/";
+    if (path.startsWith("/routes/editor")) return "/routes";
+    if (path.startsWith("/routes/marks")) return "/routes";
+    if (path.startsWith("/routes/create")) return "/routes";
+
+    // KML/RouteBuilder hang from route creation flow
+    if (path.startsWith("/kml")) return "/routes/create";
+    if (path.startsWith("/routeBuilder")) return "/routes/create";
+
+    // Trips tree: home -> trips -> trip detail
+    if (path === "/trips") return "/";
+    if (path.startsWith("/trips/")) return "/trips";
+
+    // Admin tree: home -> admin
+    if (path === "/admin") return "/";
+    if (path.startsWith("/admin/")) return "/admin";
+
+    // Generic fallback: up one path segment.
+    const parts = path.split("/").filter(Boolean);
+    if (parts.length <= 1) return "/";
+    return `/${parts.slice(0, -1).join("/")}`;
+  };
+
+  const parentHref = getTreeParent(pathname || "/");
+
   const onGoBack = () => {
-    if (typeof window !== "undefined" && window.history.length > 1) {
-      router.back();
-      return;
-    }
-    router.push("/");
+    if (!parentHref) return;
+    router.push(parentHref);
   };
 
   return (
@@ -101,12 +127,12 @@ export default function AuthSessionHeader() {
             : `${esText.authHeader.user}: ${label} | ${esText.authHeader.role}: ${role}`}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {pathname !== "/" ? (
+          {parentHref ? (
             <button
               type="button"
               onClick={onGoBack}
-              aria-label="Volver"
-              title="Volver"
+              aria-label="Atrás"
+              title="Atrás"
               style={{
                 height: 38,
                 padding: "0 10px",
@@ -124,7 +150,7 @@ export default function AuthSessionHeader() {
               <span className="material-symbols-outlined" aria-hidden="true" style={{ fontSize: 20 }}>
                 arrow_back
               </span>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>Volver</span>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Atrás</span>
             </button>
           ) : null}
           <ThemeToggle />
