@@ -23,6 +23,51 @@ const parseRoutePoints = (raw: unknown) => {
   return out;
 };
 
+const parseGoogleDraft = (raw: unknown) => {
+  if (!raw || typeof raw !== "object") return null;
+  const obj = raw as any;
+
+  const densePath = parseRoutePoints(obj?.densePath);
+  if (densePath.length < 2) return null;
+
+  const stepsRaw = Array.isArray(obj?.steps) ? obj.steps : [];
+  const steps = stepsRaw
+    .map((step: unknown) => {
+      if (!step || typeof step !== "object") return null;
+      const start = parseRoutePoints([(step as any).start_location])[0] ?? null;
+      const end = parseRoutePoints([(step as any).end_location])[0] ?? null;
+      if (!start || !end) return null;
+      return {
+        distance: (step as any).distance ?? null,
+        duration: (step as any).duration ?? null,
+        html_instructions: String((step as any).html_instructions ?? ""),
+        start_location: start,
+        end_location: end,
+        maneuver: typeof (step as any).maneuver === "string" ? (step as any).maneuver : null,
+        polyline: typeof (step as any).polyline === "string" ? (step as any).polyline : null,
+      };
+    })
+    .filter(Boolean);
+
+  const distanceM = toFiniteNumber(obj?.totals?.distanceM) ?? 0;
+  const durationS = toFiniteNumber(obj?.totals?.durationS) ?? 0;
+  const distanceKm = toFiniteNumber(obj?.totals?.distanceKm) ?? distanceM / 1000;
+  const durationMin = toFiniteNumber(obj?.totals?.durationMin) ?? durationS / 60;
+
+  const fetchedAtRaw = obj?.fetchedAt;
+  const fetchedAt =
+    typeof fetchedAtRaw === "string" || fetchedAtRaw instanceof Date ? new Date(fetchedAtRaw) : new Date();
+
+  return {
+    source: typeof obj?.source === "string" ? obj.source : "routebuilder_directions",
+    fetchedAt: Number.isNaN(fetchedAt.getTime()) ? new Date() : fetchedAt,
+    overviewPolyline: typeof obj?.overviewPolyline === "string" ? obj.overviewPolyline : null,
+    steps,
+    densePath,
+    totals: { distanceM, durationS, distanceKm, durationMin },
+  };
+};
+
 export async function POST(req: Request) {
   await connectDB();
 
@@ -30,6 +75,7 @@ export async function POST(req: Request) {
   const title = String(body?.title ?? "route 1").trim();
   const kml = String(body?.kml ?? "").trim();
   const routePoints = parseRoutePoints(body?.route);
+  const googleDraft = parseGoogleDraft(body?.googleDraft);
 
   if (!title) {
     return Response.json({ ok: false, message: "title requerido" }, { status: 400 });
@@ -54,6 +100,22 @@ export async function POST(req: Request) {
     kml: kml || null,
     policyPack,
   };
+
+  if (googleDraft) {
+    payload.google = googleDraft;
+    payload.nav = {
+      status: "ready",
+      compiledAt: new Date(),
+      mode: "google_steps",
+      validate: {
+        validatedAt: null,
+        matchPct: 0,
+        outCount: 0,
+        pass: false,
+        promoted: false,
+      },
+    };
+  }
 
   const created = await Route.create(payload);
 

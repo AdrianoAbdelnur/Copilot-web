@@ -861,20 +861,27 @@ export default function RouteBuilderMap() {
       return Math.abs(a.latitude - b.latitude) <= epsilon && Math.abs(a.longitude - b.longitude) <= epsilon;
     };
 
-    // Prefer step endpoints: fewer but semantically meaningful points (turns/segments),
-    // which are much more compatible with the current compile pipeline.
-    const stepPoints: Array<{ latitude: number; longitude: number }> = [];
+    const denseStepPath: Array<{ latitude: number; longitude: number }> = [];
     const legs = Array.isArray(route?.legs) ? route.legs : [];
     for (const leg of legs) {
       const steps = Array.isArray(leg?.steps) ? leg.steps : [];
       for (const step of steps) {
+        const stepPath = Array.isArray(step?.path) ? step.path : [];
+        if (stepPath.length > 0) {
+          for (const pathPoint of stepPath) {
+            const p = toPolicyPoint(pathPoint);
+            if (p && !areNear(denseStepPath[denseStepPath.length - 1] ?? null, p)) denseStepPath.push(p);
+          }
+          continue;
+        }
+
         const start = toPolicyPoint(step?.start_location);
         const end = toPolicyPoint(step?.end_location);
-        if (start && !areNear(stepPoints[stepPoints.length - 1] ?? null, start)) stepPoints.push(start);
-        if (end && !areNear(stepPoints[stepPoints.length - 1] ?? null, end)) stepPoints.push(end);
+        if (start && !areNear(denseStepPath[denseStepPath.length - 1] ?? null, start)) denseStepPath.push(start);
+        if (end && !areNear(denseStepPath[denseStepPath.length - 1] ?? null, end)) denseStepPath.push(end);
       }
     }
-    if (stepPoints.length >= 2) return stepPoints;
+    if (denseStepPath.length >= 2) return denseStepPath;
 
     const overviewPath = route?.overview_path;
     if (!Array.isArray(overviewPath)) return [];
@@ -884,6 +891,98 @@ export default function RouteBuilderMap() {
       if (p && !areNear(overviewPoints[overviewPoints.length - 1] ?? null, p)) overviewPoints.push(p);
     }
     return overviewPoints;
+  };
+
+  const getRenderedGoogleDraft = () => {
+    const directions = directionsRendererRef.current?.getDirections?.();
+    const route = directions?.routes?.[0];
+    if (!route) return null;
+
+    const toPolicyPoint = (position: any) => {
+      const literal = getLatLngLiteral(position);
+      if (!literal) return null;
+      return { latitude: literal.lat, longitude: literal.lng };
+    };
+
+    const areNear = (
+      a: { latitude: number; longitude: number } | null,
+      b: { latitude: number; longitude: number } | null,
+      epsilon = 1e-6
+    ) => {
+      if (!a || !b) return false;
+      return Math.abs(a.latitude - b.latitude) <= epsilon && Math.abs(a.longitude - b.longitude) <= epsilon;
+    };
+
+    const legs = Array.isArray(route?.legs) ? route.legs : [];
+    const steps: Array<{
+      distance: any;
+      duration: any;
+      html_instructions: string;
+      start_location: { latitude: number; longitude: number };
+      end_location: { latitude: number; longitude: number };
+      maneuver: string | null;
+      polyline: string | null;
+    }> = [];
+    const densePath: Array<{ latitude: number; longitude: number }> = [];
+
+    for (const leg of legs) {
+      const legSteps = Array.isArray(leg?.steps) ? leg.steps : [];
+      for (const step of legSteps) {
+        const start = toPolicyPoint(step?.start_location);
+        const end = toPolicyPoint(step?.end_location);
+        if (!start || !end) continue;
+
+        steps.push({
+          distance: step?.distance ?? null,
+          duration: step?.duration ?? null,
+          html_instructions: String(step?.instructions ?? step?.html_instructions ?? ""),
+          start_location: start,
+          end_location: end,
+          maneuver: typeof step?.maneuver === "string" ? step.maneuver : null,
+          polyline: typeof step?.encoded_lat_lngs === "string" ? step.encoded_lat_lngs : null,
+        });
+
+        const stepPath = Array.isArray(step?.path) ? step.path : [];
+        if (stepPath.length > 0) {
+          for (const pathPoint of stepPath) {
+            const p = toPolicyPoint(pathPoint);
+            if (p && !areNear(densePath[densePath.length - 1] ?? null, p)) densePath.push(p);
+          }
+          continue;
+        }
+
+        if (!areNear(densePath[densePath.length - 1] ?? null, start)) densePath.push(start);
+        if (!areNear(densePath[densePath.length - 1] ?? null, end)) densePath.push(end);
+      }
+    }
+
+    if (densePath.length < 2) return null;
+
+    let distanceM = 0;
+    let durationS = 0;
+    for (const leg of legs) {
+      distanceM += Number(leg?.distance?.value ?? 0);
+      durationS += Number(leg?.duration?.value ?? 0);
+    }
+
+    return {
+      source: "routebuilder_directions",
+      fetchedAt: new Date().toISOString(),
+      overviewPolyline:
+        typeof route?.overview_polyline === "string"
+          ? route.overview_polyline
+          : typeof route?.overview_polyline?.points === "string"
+            ? route.overview_polyline.points
+            : null,
+      steps,
+      densePath,
+      totals: {
+        distanceM,
+        durationS,
+        distanceKm: distanceM / 1000,
+        durationMin: durationS / 60,
+      },
+    };
   };
 
   const saveRoute = async () => {
@@ -905,10 +1004,12 @@ export default function RouteBuilderMap() {
     setSaveMessage("");
     setSaveMessageTone("");
     try {
+      const googleDraft = getRenderedGoogleDraft();
+
       const res = await fetch("/api/routes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, route }),
+        body: JSON.stringify({ title, route, googleDraft }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json?.ok) {
