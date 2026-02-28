@@ -467,14 +467,25 @@ export function buildPlans(args: {
     const stepDestinationRaw = steps[destStepIdx]?.end_location ?? null;
     if (!stepOriginRaw || !stepDestinationRaw) continue;
 
-    const requestOrigin = stepOriginRaw;
-    const requestDestination = stepDestinationRaw;
+    // Build request anchors from policyRoute (KML = source of truth), not from
+    // Google step endpoints, to avoid drifting anchors to "invented" corners.
+    const clusterFirstIdx = findNearestPolicyIndexByPoint(policyRoute, clusterFirst);
+    const clusterLastIdx = findNearestPolicyIndexByPoint(policyRoute, clusterLast);
 
-    const requestOriginIdx = findNearestPolicyIndexByPoint(policyRoute, requestOrigin);
-    const requestDestinationIdx = findNearestPolicyIndexByPoint(
-      policyRoute,
-      requestDestination
-    );
+    let requestOriginIdx = Math.min(clusterFirstIdx, clusterLastIdx);
+    let requestDestinationIdx = Math.max(clusterFirstIdx, clusterLastIdx);
+
+    // Expand a bit around the problematic cluster to provide context.
+    const pad = 2;
+    requestOriginIdx = clamp(requestOriginIdx - pad, 0, policyRoute.length - 1);
+    requestDestinationIdx = clamp(requestDestinationIdx + pad, 0, policyRoute.length - 1);
+
+    if (requestDestinationIdx <= requestOriginIdx) {
+      requestDestinationIdx = clamp(requestOriginIdx + 1, 0, policyRoute.length - 1);
+    }
+
+    const requestOrigin = policyRoute[requestOriginIdx];
+    const requestDestination = policyRoute[requestDestinationIdx];
 
     const waypoints = pickKmlWaypointsBetween(
       policyRoute,

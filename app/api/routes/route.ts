@@ -1,8 +1,27 @@
 import { connectDB } from "@/lib/db";
 import Route from "@/models/RouteMap";
 import { parseKmlToPolicyPack } from "@/lib/policy/parseKml";
+import type { PolicyPack } from "@/lib/policy/types";
 
 export const runtime = "nodejs";
+
+const toFiniteNumber = (value: unknown) => {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+};
+
+const parseRoutePoints = (raw: unknown) => {
+  if (!Array.isArray(raw)) return [];
+  const out: Array<{ latitude: number; longitude: number }> = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const lat = toFiniteNumber((item as any).latitude ?? (item as any).lat);
+    const lng = toFiniteNumber((item as any).longitude ?? (item as any).lng);
+    if (lat == null || lng == null) continue;
+    out.push({ latitude: lat, longitude: lng });
+  }
+  return out;
+};
 
 export async function POST(req: Request) {
   await connectDB();
@@ -10,18 +29,33 @@ export async function POST(req: Request) {
   const body = await req.json();
   const title = String(body?.title ?? "route 1").trim();
   const kml = String(body?.kml ?? "").trim();
+  const routePoints = parseRoutePoints(body?.route);
 
   if (!title) {
     return Response.json({ ok: false, message: "title requerido" }, { status: 400 });
   }
 
-  const policyPack = kml ? parseKmlToPolicyPack(kml) : null;
+  let policyPack: PolicyPack | null = null;
+  if (kml) {
+    policyPack = parseKmlToPolicyPack(kml);
+  } else if (routePoints.length >= 2) {
+    policyPack = {
+      version: 1,
+      route: routePoints,
+      zones: [],
+      pois: [],
+    };
+  } else {
+    return Response.json({ ok: false, message: "kml o route requerido" }, { status: 400 });
+  }
 
-  const created = await Route.create({
+  const payload: any = {
     title,
     kml: kml || null,
     policyPack,
-  });
+  };
+
+  const created = await Route.create(payload);
 
   return Response.json({
     ok: true,

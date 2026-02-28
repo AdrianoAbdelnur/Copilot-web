@@ -1,5 +1,6 @@
-﻿"use client";
+"use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { loadGoogleMaps } from "@/lib/gmaps/loader";
 import { makeDotMarker, setMarkerOff } from "@/lib/gmaps/markers";
@@ -97,6 +98,13 @@ const defaultSegmentForm = (): SegmentForm => ({
   color: SEGMENT_COLORS[0].value,
   navMessages: [],
 });
+
+function radiusColorByPoiType(type: unknown): string {
+  const t = String(type ?? "").toLowerCase();
+  if (t === "critical" || t === "peligro") return "#ef4444";
+  if (t === "alert" || t === "alerta") return "#f59e0b";
+  return "#22c55e";
+}
 
 function uid() {
   return (globalThis.crypto as any)?.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -215,6 +223,7 @@ function buildSegmentPath(route: LatLng[], a: PendingSegmentPoint, b: PendingSeg
 
 export default function RouteEditorMap({ routeId }: { routeId: string }) {
   const t = esText.routeEditor;
+  const router = useRouter();
   const mapDivRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
 
@@ -233,6 +242,7 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
   const [poiOpen, setPoiOpen] = useState(false);
   const [pendingPoi, setPendingPoi] = useState<PendingPoi>(null);
   const [poiForm, setPoiForm] = useState<PoiForm>(defaultPoiForm());
+  const [editingPoiId, setEditingPoiId] = useState<string | null>(null);
 
   const [segmentOpen, setSegmentOpen] = useState(false);
   const [pendingSegment, setPendingSegment] = useState<PendingSegment>(null);
@@ -247,6 +257,7 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
   const [sideTab, setSideTab] = useState<"layers" | "pois" | "segments">("layers");
 
   const [loaded, setLoaded] = useState(false);
+  const [readyModalOpen, setReadyModalOpen] = useState(false);
 
   useEffect(() => {
     modeRef.current = mode;
@@ -274,6 +285,8 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
           center: { lat: -26.8318, lng: -65.2194 },
           zoom: 6,
           mapTypeId: "roadmap",
+          gestureHandling: "greedy",
+          scrollwheel: true,
           draggableCursor: "grab",
           draggingCursor: "grabbing",
         });
@@ -397,6 +410,35 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
     segmentOverlaysRef.current = [];
 
     if (showPoiLayer) {
+      const openPoiEditor = (poi: any) => {
+        const lat = Number(poi?.latitude);
+        const lng = Number(poi?.longitude);
+        const idx = Number(poi?.idx);
+        const segI = Number(poi?.segI);
+        const t = Number(poi?.t);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+        setEditingPoiId(String(poi?.id ?? ""));
+        setPendingPoi({
+          idx: Number.isFinite(idx) ? idx : 0,
+          segI: Number.isFinite(segI) ? segI : 0,
+          t: Number.isFinite(t) ? t : 0,
+          distM: 0,
+          latitude: lat,
+          longitude: lng,
+        });
+        setPoiForm({
+          name: String(poi?.name ?? ""),
+          type: String(poi?.type ?? "info"),
+          radiusM: String(poi?.radiusM ?? "50"),
+          color: String(poi?.ui?.color ?? "#22c55e"),
+          sizePx: String(poi?.ui?.sizePx ?? 20),
+          navMessages: Array.isArray(poi?.navMessages) ? poi.navMessages : [],
+        });
+        setPoiOpen(true);
+        setStatus(`Editando POI: ${String(poi?.name ?? "POI")}`);
+      };
+
       for (const p of pois) {
         const lat = Number((p as any).latitude);
         const lng = Number((p as any).longitude);
@@ -412,8 +454,27 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
           color,
           sizePx,
         });
+        m?.addListener?.("click", () => openPoiEditor(p));
 
         poiMarkersRef.current.push(m);
+
+        const radiusM = Number((p as any)?.radiusM || 0);
+        if (Number.isFinite(radiusM) && radiusM > 0) {
+          const radiusColor = radiusColorByPoiType((p as any)?.type);
+          const circle = new window.google.maps.Circle({
+            map,
+            center: { lat, lng },
+            radius: radiusM,
+            strokeColor: radiusColor,
+            strokeOpacity: 0.9,
+            strokeWeight: 2,
+            fillColor: radiusColor,
+            fillOpacity: 0.14,
+            clickable: false,
+          });
+          circle?.addListener?.("click", () => openPoiEditor(p));
+          segmentOverlaysRef.current.push(circle);
+        }
       }
     }
 
@@ -481,6 +542,7 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error || t.saveFailed);
       setStatus(t.saved);
+      setReadyModalOpen(true);
     } catch (e: any) {
       setStatus(e?.message || t.saveFailed);
     }
@@ -512,7 +574,7 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
     if (exit && !String(exit.text || "").trim()) return setStatus(t.poiExitTextRequired);
 
     const poi: PoiPolicy = {
-      id: uid(),
+      id: editingPoiId ?? uid(),
       name,
       type: poiForm.type,
       radiusM,
@@ -530,10 +592,15 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
       navMessages: msgs,
     };
 
-    setPois((prev) => [...prev, poi]);
+    if (editingPoiId) {
+      setPois((prev) => prev.map((item) => (item.id === editingPoiId ? poi : item)));
+    } else {
+      setPois((prev) => [...prev, poi]);
+    }
 
     setPoiOpen(false);
     setPendingPoi(null);
+    setEditingPoiId(null);
     setStatus(`${t.poiAdded}: ${name}`);
   };
 
@@ -608,9 +675,18 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
 
         <button
           onClick={saveAllToDB}
-          className="rounded-md border border-slate-900 bg-slate-900 px-3 py-2 text-xs font-medium text-white"
+          style={{
+            padding: "8px 10px",
+            borderRadius: 8,
+            border: "1px solid #0f766e",
+            background: "#0d9488",
+            color: "#fff",
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
         >
-          {t.saveToDb}
+          Guardar cambios
         </button>
 
         <button
@@ -739,6 +815,7 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
         onCancel={() => {
           setPoiOpen(false);
           setPendingPoi(null);
+          setEditingPoiId(null);
         }}
         onSave={savePoi}
       />
@@ -758,7 +835,75 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
         }}
         onSave={saveSegment}
       />
+
+      {readyModalOpen ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15,23,42,0.55)",
+            display: "grid",
+            placeItems: "center",
+            padding: 16,
+            zIndex: 12000,
+          }}
+        >
+          <div
+            style={{
+              width: "min(420px, 100%)",
+              background: "var(--surface)",
+              color: "var(--foreground)",
+              border: "1px solid var(--border)",
+              borderRadius: 12,
+              padding: 16,
+            }}
+          >
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8, color: "#0f766e" }}>
+              Ruta lista
+            </div>
+            <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 14 }}>
+              Tu ruta esta lista para ser navegada.
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => setReadyModalOpen(false)}
+                style={{
+                  border: "1px solid var(--border)",
+                  background: "var(--surface)",
+                  color: "var(--foreground)",
+                  borderRadius: 8,
+                  padding: "8px 10px",
+                  cursor: "pointer",
+                }}
+              >
+                Cerrar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setReadyModalOpen(false);
+                  router.push("/trips");
+                }}
+                style={{
+                  border: "1px solid #0f766e",
+                  background: "#0d9488",
+                  color: "#fff",
+                  borderRadius: 8,
+                  padding: "8px 10px",
+                  cursor: "pointer",
+                }}
+              >
+                Ir a viajes
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
+
+
+
 

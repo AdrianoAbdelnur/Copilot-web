@@ -85,28 +85,6 @@ export default function useClickDrawRoute({
     return Math.abs(p1.lat - p2.lat) <= epsilon && Math.abs(p1.lng - p2.lng) <= epsilon;
   };
 
-  const getNearestRoutePoint = (position: any, routePoints: any[]) => {
-    const target = getLatLngLiteral(position);
-    if (!target || routePoints.length === 0) return position;
-
-    let bestPoint = routePoints[0];
-    let bestDistance = Number.POSITIVE_INFINITY;
-
-    for (const point of routePoints) {
-      const p = getLatLngLiteral(point);
-      if (!p) continue;
-      const dLat = p.lat - target.lat;
-      const dLng = p.lng - target.lng;
-      const distanceSq = dLat * dLat + dLng * dLng;
-      if (distanceSq < bestDistance) {
-        bestDistance = distanceSq;
-        bestPoint = point;
-      }
-    }
-
-    return bestPoint;
-  };
-
   const clearPendingMapClick = () => {
     if (pendingMapClickTimeoutRef.current == null) return;
     window.clearTimeout(pendingMapClickTimeoutRef.current);
@@ -166,26 +144,9 @@ export default function useClickDrawRoute({
       isApplyingHistoryRef.current = true;
       directionsRendererRef.current.setDirections(result);
 
-      const snappedLegs = result?.routes?.[0]?.legs;
-      const firstLeg = Array.isArray(snappedLegs) ? snappedLegs[0] : null;
-      if (firstLeg?.start_location) {
-        clickDrawStartRef.current = firstLeg.start_location;
-      }
-      const routePoints = Array.isArray(result?.routes?.[0]?.overview_path) ? result.routes[0].overview_path : [];
-      if (routePoints.length > 0) {
-        clickDrawStopsRef.current = stops.map((stop) => ({
-          ...stop,
-          position: getNearestRoutePoint(stop.position, routePoints),
-        }));
-      } else {
-        clickDrawStopsRef.current = stops;
-      }
-      if (finalizeRoute) {
-        const lastLeg = Array.isArray(snappedLegs) ? snappedLegs[snappedLegs.length - 1] : null;
-        if (lastLeg?.end_location) {
-          clickDrawEndRef.current = lastLeg.end_location;
-        }
-      }
+      // Keep user-picked click positions exactly as placed. Re-snapping them to
+      // Google's returned geometry causes anchors to drift on every recalculation.
+      clickDrawStopsRef.current = stops;
       syncSidebarFromClickDraw(finalizeRoute, result);
 
       if (finalizeRoute) {

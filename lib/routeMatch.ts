@@ -137,61 +137,99 @@ export function computeMatchReport(args: {
   if (googlePolylinePoints.length < 2) throw new Error("googlePolylinePoints inválida");
 
   const refLat = (policyRoute[0].latitude * Math.PI) / 180;
+  const sampleStepM = 10;
 
-  const sampleStep = Math.max(1, Math.floor(policyRoute.length / maxSamples));
-  const samples: LatLng[] = [];
-  for (let i = 0; i < policyRoute.length; i += sampleStep) samples.push(policyRoute[i]);
-  if (samples[samples.length - 1] !== policyRoute[policyRoute.length - 1]) {
-    samples.push(policyRoute[policyRoute.length - 1]);
-  }
+  const samplePolyline = (poly: LatLng[]) => {
+    const dense = densifyPolyline(poly, sampleStepM);
+    if (dense.length <= maxSamples) return dense;
+    const stride = Math.max(1, Math.floor(dense.length / maxSamples));
+    const out: LatLng[] = [];
+    for (let i = 0; i < dense.length; i += stride) out.push(dense[i]);
+    if (out[out.length - 1] !== dense[dense.length - 1]) out.push(dense[dense.length - 1]);
+    return out;
+  };
 
-  const googleDense = densifyPolyline(googlePolylinePoints, 30);
-  const gXY = googleDense.map((p) => toXYMeters(p, refLat));
+  const polylineLengthM = (poly: LatLng[]) => {
+    let total = 0;
+    for (let i = 1; i < poly.length; i++) total += haversineM(poly[i - 1], poly[i]);
+    return total;
+  };
 
-  let inCorridor = 0;
-  let maxErrorM = 0;
-  let sumErrorM = 0;
+  const computeDirectional = (samples: LatLng[], otherDense: LatLng[]) => {
+    const otherXY = otherDense.map((p) => toXYMeters(p, refLat));
+    let inCorridor = 0;
+    let maxErrorM = 0;
+    let sumErrorM = 0;
+    const worst: { idx: number; errorM: number; point: LatLng }[] = [];
+    const outOfCorridorPoints: { idx: number; errorM: number; point: LatLng }[] = [];
 
-  const worst: { idx: number; errorM: number; point: LatLng }[] = [];
-  const outOfCorridorPoints: { idx: number; errorM: number; point: LatLng }[] = [];
+    for (let i = 0; i < samples.length; i++) {
+      const p = samples[i];
+      const pXY = toXYMeters(p, refLat);
+      let best = Infinity;
 
-  for (let i = 0; i < samples.length; i++) {
-    const p = samples[i];
-    const pXY = toXYMeters(p, refLat);
+      for (let s = 0; s < otherXY.length - 1; s++) {
+        const d = pointToSegmentDistM(pXY, otherXY[s], otherXY[s + 1]);
+        if (d < best) best = d;
+      }
 
-    let best = Infinity;
-    for (let s = 0; s < gXY.length - 1; s++) {
-      const d = pointToSegmentDistM(pXY, gXY[s], gXY[s + 1]);
-      if (d < best) best = d;
+      sumErrorM += best;
+      if (best > maxErrorM) maxErrorM = best;
+      if (best <= corridorM) inCorridor++;
+
+      const row = { idx: i, errorM: best, point: p };
+      worst.push(row);
+      if (best > corridorM) outOfCorridorPoints.push(row);
     }
 
-    sumErrorM += best;
-    if (best > maxErrorM) maxErrorM = best;
-    if (best <= corridorM) inCorridor++;
+    worst.sort((a, b) => b.errorM - a.errorM);
+    const matchPct = samples.length ? (inCorridor / samples.length) * 100 : 0;
+    const avgErrorM = samples.length ? sumErrorM / samples.length : 0;
 
-    const row = { idx: i, errorM: best, point: p };
-    worst.push(row);
+    return {
+      samples: samples.length,
+      inCorridor,
+      matchPct,
+      maxErrorM,
+      avgErrorM,
+      worstTop: worst.slice(0, 10),
+      outOfCorridorPoints,
+    };
+  };
 
-    if (best > corridorM) {
-      outOfCorridorPoints.push(row);
-    }
-  }
+  const policySamples = samplePolyline(policyRoute);
+  const googleSamples = samplePolyline(googlePolylinePoints);
+  const policyDenseForSegs = densifyPolyline(policyRoute, sampleStepM);
+  const googleDenseForSegs = densifyPolyline(googlePolylinePoints, sampleStepM);
 
-  worst.sort((a, b) => b.errorM - a.errorM);
-  const worstTop = worst.slice(0, 10);
+  const policyToGoogle = computeDirectional(policySamples, googleDenseForSegs);
+  const googleToPolicy = computeDirectional(googleSamples, policyDenseForSegs);
 
-  const matchPct = samples.length ? (inCorridor / samples.length) * 100 : 0;
-  const avgErrorM = samples.length ? sumErrorM / samples.length : 0;
+  const lengthPolicyM = polylineLengthM(policySamples);
+  const lengthGoogleM = polylineLengthM(googleSamples);
+  const lengthRatio =
+    lengthPolicyM > 0 && lengthGoogleM > 0
+      ? Math.min(lengthPolicyM, lengthGoogleM) / Math.max(lengthPolicyM, lengthGoogleM)
+      : 0;
+
+  // Keep legacy keys for compatibility, but now strict/bidirectional.
+  const strictMatchPct = Math.min(policyToGoogle.matchPct, googleToPolicy.matchPct);
 
   return {
-    samples: samples.length,
-    inCorridor,
-    matchPct,
+    samples: policyToGoogle.samples,
+    inCorridor: policyToGoogle.inCorridor,
+    matchPct: strictMatchPct,
     corridorM,
-    maxErrorM,
-    avgErrorM,
-    worstTop,
-    outOfCorridorPoints, 
+    maxErrorM: Math.max(policyToGoogle.maxErrorM, googleToPolicy.maxErrorM),
+    avgErrorM: (policyToGoogle.avgErrorM + googleToPolicy.avgErrorM) / 2,
+    worstTop: policyToGoogle.worstTop,
+    outOfCorridorPoints: policyToGoogle.outOfCorridorPoints,
+    reverseOutOfCorridorPoints: googleToPolicy.outOfCorridorPoints,
+    policyToGoogle,
+    googleToPolicy,
+    lengthPolicyM,
+    lengthGoogleM,
+    lengthRatio,
   };
 }
 
