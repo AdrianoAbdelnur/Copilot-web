@@ -61,6 +61,14 @@ export default function Home() {
         icon: "place",
         tone: "orange",
       },
+      {
+        href: "/trips/live",
+        title: "Monitoreo en vivo",
+        description: "Visualizá drivers activos en mapa con posición, estado y velocidad actual.",
+        badge: "Tracking live",
+        icon: "radar",
+        tone: "primary",
+      },
     ];
 
     if (isAdmin) {
@@ -117,7 +125,7 @@ export default function Home() {
           </div>
         </header>
 
-        <section className={`grid gap-6 ${cards.length >= 4 ? "md:grid-cols-2 xl:grid-cols-4" : "md:grid-cols-3"}`}>
+        <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           {cards.map((card) => {
             const tone = toneClasses[card.tone];
             return (

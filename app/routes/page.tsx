@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import OperationsShell from "@/components/layout/OperationsShell";
 import { Badge } from "@/components/ui/Badge";
@@ -18,7 +18,7 @@ type RouteListItem = {
   nav?: { validate?: { pass?: boolean } };
 };
 
-export default function RoutesPage() {
+function RoutesPageContent() {
   const t = esText.routesPage;
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -159,5 +159,12 @@ export default function RoutesPage() {
       </Card>
       )}
     </OperationsShell>
+  );
+}
+export default function RoutesPage() {
+  return (
+    <Suspense fallback={<div className="p-4 text-sm text-slate-500">Cargando rutas...</div>}>
+      <RoutesPageContent />
+    </Suspense>
   );
 }
