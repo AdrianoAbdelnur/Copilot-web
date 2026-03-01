@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import OperationsShell from "@/components/layout/OperationsShell";
 import { Button } from "@/components/ui/Button";
@@ -31,7 +31,7 @@ const RouteMapViewer = dynamic(
   }
 );
 
-export default function RoutesPage() {
+function RoutesPageContent() {
   const t = esText.routesPage;
   const [items, setItems] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
@@ -989,5 +989,10 @@ export default function RoutesPage() {
   );
 }
 
-
-
+export default function RoutesPage() {
+  return (
+    <Suspense fallback={<div className="p-4 text-sm text-slate-500">Cargando editor...</div>}>
+      <RoutesPageContent />
+    </Suspense>
+  );
+}
