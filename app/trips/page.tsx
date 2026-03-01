@@ -404,6 +404,13 @@ export default function TripsPage() {
               <span className="h-2 w-2 animate-pulse rounded-full bg-[#137fec]" />
               Sistema conectado
             </div>
+            <Link
+              href="/trips/live"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
+            >
+              <span className="material-symbols-outlined text-base">map</span>
+              Monitoreo en vivo
+            </Link>
             <button
               type="button"
               onClick={() => setIsCreateModalOpen(true)}

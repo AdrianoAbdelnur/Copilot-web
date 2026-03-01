@@ -32,6 +32,10 @@ export async function POST(req: Request) {
       status: "active",
       startedAt,
       startPos,
+      live: {
+        t: startedAt,
+        pos: startPos,
+      },
       device,
     });
 

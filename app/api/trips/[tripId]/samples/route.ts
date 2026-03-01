@@ -99,11 +99,19 @@ export async function POST(req: Request, ctx: Ctx) {
         maxSpeed = maxSpeed === null ? speed : Math.max(maxSpeed, speed);
       }
     }
+    const latestDoc = docsByTime[docsByTime.length - 1];
 
     const update: Record<string, any> = {
       $inc: {
         "totals.samplesCount": docs.length,
         "totals.distanceM": Math.round(distanceDeltaM),
+      },
+      $set: {
+        "live.t": latestDoc.t,
+        "live.pos": latestDoc.pos,
+        "live.speedKmh": latestDoc.speedKmh ?? null,
+        "live.heading": latestDoc.heading ?? null,
+        "live.accuracyM": latestDoc.accuracyM ?? null,
       },
     };
     if (maxSpeed !== null) update.$max = { "totals.maxSpeedKmh": maxSpeed };

@@ -34,6 +34,17 @@ const TotalsSchema = new Schema(
   { _id: false }
 );
 
+const LiveSnapshotSchema = new Schema(
+  {
+    t: { type: Date, default: null },
+    pos: { type: GeoPointSchema, default: null },
+    speedKmh: { type: Number, default: null },
+    heading: { type: Number, default: null },
+    accuracyM: { type: Number, default: null },
+  },
+  { _id: false }
+);
+
 const TripSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
@@ -48,6 +59,7 @@ const TripSchema = new Schema(
     endedAt: { type: Date, default: null },
     startPos: { type: GeoPointSchema, required: true },
     endPos: { type: GeoPointSchema, default: null },
+    live: { type: LiveSnapshotSchema, default: () => ({}) },
     device: { type: DeviceSchema, default: null },
     totals: { type: TotalsSchema, default: () => ({}) },
   },
