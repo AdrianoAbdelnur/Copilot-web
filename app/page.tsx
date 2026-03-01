@@ -38,11 +38,11 @@ export default function Home() {
   const cards = useMemo<QuickCard[]>(() => {
     const base: QuickCard[] = [
       {
-        href: "/kml",
-        title: "KML y capas",
-        description: "Cargá KML y administrá capas geoespaciales para operación y validación.",
-        badge: "Carga rápida",
-        icon: "layers",
+        href: "/routes/create",
+        title: "Cargar ruta",
+        description: "Iniciá una ruta por KML o RouteBuilder y continuá con validación en el editor.",
+        badge: "Crear ruta",
+        icon: "upload_file",
         tone: "primary",
       },
       {
@@ -54,11 +54,11 @@ export default function Home() {
         tone: "indigo",
       },
       {
-        href: "/trips",
-        title: "Viajes",
-        description: "Asigná viajes y monitoreá recorridos en curso con detalle de eventos y samples.",
-        badge: "Monitoreo en vivo",
-        icon: "local_shipping",
+        href: "/routes/marks",
+        title: "Personalizar rutas",
+        description: "Agregá marcadores, POIs y tramos para completar los detalles de la ruta.",
+        badge: "Editor de mapa",
+        icon: "place",
         tone: "orange",
       },
     ];
@@ -152,9 +152,9 @@ export default function Home() {
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <QuickAction href="/routes" icon="map" title="Editar rutas" subtitle="Validación y corrección" />
-              <QuickAction href="/routes/marks" icon="place" title="POIs y tramos" subtitle="Editor de mapa" disabled />
+              <QuickAction href="/routes/marks" icon="place" title="POIs y tramos" subtitle="Editor de mapa" />
               <QuickAction href="/trips" icon="alt_route" title="Asignar viajes" subtitle="Despacho y monitoreo" />
-              <QuickAction href="/kml" icon="upload_file" title="Cargar KML" subtitle="Importar capas" />
+              <QuickAction href="/routes/create" icon="upload_file" title="Cargar ruta" subtitle="KML o RouteBuilder" />
             </div>
           </div>
 

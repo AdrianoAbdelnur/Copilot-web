@@ -5,11 +5,15 @@ type RouteBuilderSidebarProps = {
   onToggleCollapsed: () => void;
   statusLabel: string;
   isReady: boolean;
+  routeTitle: string;
   origin: string;
   destination: string;
   waypoints: string[];
   routeLoading: boolean;
   routeError: string;
+  saveLoading: boolean;
+  saveMessage: string;
+  saveMessageTone: "ok" | "error" | "";
   originInputRef: RefObject<HTMLInputElement | null>;
   destinationInputRef: RefObject<HTMLInputElement | null>;
   setWaypointInputRef: (index: number, el: HTMLInputElement | null) => void;
@@ -22,6 +26,8 @@ type RouteBuilderSidebarProps = {
   onMoveWaypointDown: (index: number) => void;
   onCalculateRoute: () => void;
   onClearRoute: () => void;
+  onRouteTitleChange: (value: string) => void;
+  onSaveRoute: () => void;
 };
 
 function IconButton({
@@ -103,11 +109,15 @@ export default function RouteBuilderSidebar({
   onToggleCollapsed,
   statusLabel,
   isReady,
+  routeTitle,
   origin,
   destination,
   waypoints,
   routeLoading,
   routeError,
+  saveLoading,
+  saveMessage,
+  saveMessageTone,
   originInputRef,
   destinationInputRef,
   setWaypointInputRef,
@@ -120,6 +130,8 @@ export default function RouteBuilderSidebar({
   onMoveWaypointDown,
   onCalculateRoute,
   onClearRoute,
+  onRouteTitleChange,
+  onSaveRoute,
 }: RouteBuilderSidebarProps) {
   if (collapsed) {
     return (
@@ -163,8 +175,24 @@ export default function RouteBuilderSidebar({
     >
       <div style={{ padding: 10, borderBottom: "1px solid var(--border)" }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
-          <div>
-            <div style={{ fontSize: 16, lineHeight: 1.15, marginBottom: 4, color: "var(--foreground)", fontWeight: 600 }}>Mapa sin titulo</div>
+          <div style={{ flex: 1 }}>
+            <input
+              value={routeTitle}
+              onChange={(e) => onRouteTitleChange(e.target.value)}
+              placeholder="Mapa sin titulo"
+              style={{
+                width: "100%",
+                fontSize: 16,
+                lineHeight: 1.15,
+                marginBottom: 4,
+                color: "var(--foreground)",
+                fontWeight: 600,
+                border: "1px solid var(--border)",
+                borderRadius: 6,
+                background: "var(--surface)",
+                padding: "6px 8px",
+              }}
+            />
             <div style={{ fontSize: 11, color: "var(--muted)" }}>{statusLabel}</div>
           </div>
           <IconButton title="Ocultar panel" onClick={onToggleCollapsed}>
@@ -301,7 +329,27 @@ export default function RouteBuilderSidebar({
           >
             Limpiar ruta
           </button>
+          <button
+            type="button"
+            onClick={onSaveRoute}
+            disabled={!isReady || saveLoading}
+            style={{
+              padding: "7px 10px",
+              borderRadius: 6,
+              border: "1px solid #0f766e",
+              background: "#0d9488",
+              color: "#fff",
+              fontSize: 12,
+              opacity: !isReady || saveLoading ? 0.65 : 1,
+              cursor: !isReady || saveLoading ? "default" : "pointer",
+            }}
+          >
+            {saveLoading ? "Guardando..." : "Guardar ruta"}
+          </button>
           {routeError ? <div style={{ color: "#b91c1c", fontSize: 12 }}>{routeError}</div> : null}
+          {saveMessage ? (
+            <div style={{ color: saveMessageTone === "ok" ? "#0f766e" : "#b91c1c", fontSize: 12 }}>{saveMessage}</div>
+          ) : null}
         </div>
       </div>
     </aside>

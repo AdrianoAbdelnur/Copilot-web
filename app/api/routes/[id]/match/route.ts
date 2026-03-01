@@ -22,7 +22,13 @@ export async function POST(_: Request, ctx: Ctx) {
 
   const matchPct = Number(r.report?.matchPct ?? 0);
   const outCount = Number(r.report?.outOfCorridorPoints?.length ?? 0);
-  const isPerfect = matchPct >= 99.999 && outCount === 0;
+  const reverseMatchPct = Number(r.report?.googleToPolicy?.matchPct ?? r.report?.matchPct ?? 0);
+  const reverseOutCount = Number(r.report?.reverseOutOfCorridorPoints?.length ?? 0);
+  const isPerfect =
+    matchPct >= 99.999 &&
+    reverseMatchPct >= 99.999 &&
+    outCount === 0 &&
+    reverseOutCount === 0;
 
   doc.meta.corridorM = r.corridorM;
 

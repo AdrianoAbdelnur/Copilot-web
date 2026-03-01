@@ -233,6 +233,8 @@ export default function SimpleClickMap() {
           center: { lat: -26.8318, lng: -65.2194 },
           zoom: 6,
           mapTypeId: "roadmap",
+          gestureHandling: "greedy",
+          scrollwheel: true,
           draggableCursor: "grab",
           draggingCursor: "grabbing",
         });

@@ -78,6 +78,32 @@ export async function POST(_: Request, ctx: { params: Promise<{ id: string }> })
     );
   }
 
+  const hasRouteBuilderGoogle =
+    doc.google?.source === "routebuilder_directions" &&
+    Array.isArray(doc.google?.densePath) &&
+    doc.google.densePath.length >= 2;
+
+  if (hasRouteBuilderGoogle) {
+    doc.nav.compiledAt = new Date();
+    doc.nav.status = "ready";
+    await doc.save();
+
+    return Response.json({
+      ok: true,
+      id: String(doc._id),
+      skipped: true,
+      reason: "routebuilder_geometry_preserved",
+      anchorsCount: doc.meta?.anchorsCount ?? 0,
+      totals: doc.google?.totals ?? { distanceM: 0, durationS: 0, distanceKm: 0, durationMin: 0 },
+      summary: {
+        legs: null,
+        steps: Array.isArray(doc.google?.steps) ? doc.google.steps.length : 0,
+        densePoints: Array.isArray(doc.google?.densePath) ? doc.google.densePath.length : 0,
+        overviewPolyline: Boolean(doc.google?.overviewPolyline),
+      },
+    });
+  }
+
   const anchors = pickAnchors(policyRoute, 23);
   const origin = anchors[0];
   const destination = anchors[anchors.length - 1];

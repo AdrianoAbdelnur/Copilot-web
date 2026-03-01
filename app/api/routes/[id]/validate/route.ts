@@ -78,8 +78,14 @@ export async function POST(req: Request, ctx: Ctx) {
   const report = r.report;
   const matchPct = Number(report?.matchPct ?? 0);
   const outCount = Number(report?.outOfCorridorPoints?.length ?? 0);
+  const reverseMatchPct = Number(report?.googleToPolicy?.matchPct ?? report?.matchPct ?? 0);
+  const reverseOutCount = Number(report?.reverseOutOfCorridorPoints?.length ?? 0);
 
-  const pass = matchPct >= 99.999 && outCount === 0;
+  const pass =
+    matchPct >= 99.999 &&
+    reverseMatchPct >= 99.999 &&
+    outCount === 0 &&
+    reverseOutCount === 0;
 
   if (pass) {
     const totals = computeTotalsFromSteps(candGoogle.steps ?? []);

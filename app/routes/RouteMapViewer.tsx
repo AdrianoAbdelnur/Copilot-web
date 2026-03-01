@@ -236,6 +236,8 @@ export function RouteMapViewer({
         center: { lat: -26.8318, lng: -65.2194 },
         zoom: 7,
         mapTypeId: "roadmap",
+        gestureHandling: "greedy",
+        scrollwheel: true,
       });
     }
   }, [ready]);

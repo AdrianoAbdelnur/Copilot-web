@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { loadGoogleMaps } from "@/lib/gmaps/loader";
 import RouteBuilderSidebar from "./RouteBuilderSidebar";
@@ -40,14 +41,25 @@ export default function RouteBuilderMap() {
   const waypointInputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error" | "missing-key">("loading");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [routeTitle, setRouteTitle] = useState("");
   const [origin, setOrigin] = useState("");
   const [destination, setDestination] = useState("");
   const [waypoints, setWaypoints] = useState<string[]>([]);
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeError, setRouteError] = useState("");
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("");
+  const [saveMessageTone, setSaveMessageTone] = useState<"ok" | "error" | "">("");
+  const [saveModal, setSaveModal] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    nextHref?: string;
+  }>({ open: false, title: "", message: "" });
   const [canUndoRouteEdit, setCanUndoRouteEdit] = useState(false);
   const [isClickDrawing, setIsClickDrawing] = useState(false);
   const [isMapReady, setIsMapReady] = useState(false);
+  const router = useRouter();
 
   const setClickDrawingMode = (value: boolean) => {
     isClickDrawingRef.current = value;
@@ -523,6 +535,8 @@ export default function RouteBuilderMap() {
       center: { lat: -26.8318, lng: -65.2194 },
       zoom: 7,
       mapTypeId: "roadmap",
+      gestureHandling: "greedy",
+      scrollwheel: true,
       disableDoubleClickZoom: true,
       clickableIcons: false,
     });
@@ -652,6 +666,8 @@ export default function RouteBuilderMap() {
     restorePreviewMarkersVisuals();
     resetRouteHistory();
     setRouteError("");
+    setSaveMessage("");
+    setSaveMessageTone("");
   };
 
   const undoRouteEdit = () => {
@@ -789,6 +805,8 @@ export default function RouteBuilderMap() {
 
     setRouteLoading(true);
     setRouteError("");
+    setSaveMessage("");
+    setSaveMessageTone("");
 
     try {
       const request = {
@@ -823,6 +841,199 @@ export default function RouteBuilderMap() {
     }
   };
 
+  const getRenderedRoutePoints = () => {
+    const directions = directionsRendererRef.current?.getDirections?.();
+    const route = directions?.routes?.[0];
+    if (!route) return [];
+
+    const toPolicyPoint = (position: any) => {
+      const literal = getLatLngLiteral(position);
+      if (!literal) return null;
+      return { latitude: literal.lat, longitude: literal.lng };
+    };
+
+    const areNear = (
+      a: { latitude: number; longitude: number } | null,
+      b: { latitude: number; longitude: number } | null,
+      epsilon = 1e-6
+    ) => {
+      if (!a || !b) return false;
+      return Math.abs(a.latitude - b.latitude) <= epsilon && Math.abs(a.longitude - b.longitude) <= epsilon;
+    };
+
+    const denseStepPath: Array<{ latitude: number; longitude: number }> = [];
+    const legs = Array.isArray(route?.legs) ? route.legs : [];
+    for (const leg of legs) {
+      const steps = Array.isArray(leg?.steps) ? leg.steps : [];
+      for (const step of steps) {
+        const stepPath = Array.isArray(step?.path) ? step.path : [];
+        if (stepPath.length > 0) {
+          for (const pathPoint of stepPath) {
+            const p = toPolicyPoint(pathPoint);
+            if (p && !areNear(denseStepPath[denseStepPath.length - 1] ?? null, p)) denseStepPath.push(p);
+          }
+          continue;
+        }
+
+        const start = toPolicyPoint(step?.start_location);
+        const end = toPolicyPoint(step?.end_location);
+        if (start && !areNear(denseStepPath[denseStepPath.length - 1] ?? null, start)) denseStepPath.push(start);
+        if (end && !areNear(denseStepPath[denseStepPath.length - 1] ?? null, end)) denseStepPath.push(end);
+      }
+    }
+    if (denseStepPath.length >= 2) return denseStepPath;
+
+    const overviewPath = route?.overview_path;
+    if (!Array.isArray(overviewPath)) return [];
+    const overviewPoints: Array<{ latitude: number; longitude: number }> = [];
+    for (const point of overviewPath) {
+      const p = toPolicyPoint(point);
+      if (p && !areNear(overviewPoints[overviewPoints.length - 1] ?? null, p)) overviewPoints.push(p);
+    }
+    return overviewPoints;
+  };
+
+  const getRenderedGoogleDraft = () => {
+    const directions = directionsRendererRef.current?.getDirections?.();
+    const route = directions?.routes?.[0];
+    if (!route) return null;
+
+    const toPolicyPoint = (position: any) => {
+      const literal = getLatLngLiteral(position);
+      if (!literal) return null;
+      return { latitude: literal.lat, longitude: literal.lng };
+    };
+
+    const areNear = (
+      a: { latitude: number; longitude: number } | null,
+      b: { latitude: number; longitude: number } | null,
+      epsilon = 1e-6
+    ) => {
+      if (!a || !b) return false;
+      return Math.abs(a.latitude - b.latitude) <= epsilon && Math.abs(a.longitude - b.longitude) <= epsilon;
+    };
+
+    const legs = Array.isArray(route?.legs) ? route.legs : [];
+    const steps: Array<{
+      distance: any;
+      duration: any;
+      html_instructions: string;
+      start_location: { latitude: number; longitude: number };
+      end_location: { latitude: number; longitude: number };
+      maneuver: string | null;
+      polyline: string | null;
+    }> = [];
+    const densePath: Array<{ latitude: number; longitude: number }> = [];
+
+    for (const leg of legs) {
+      const legSteps = Array.isArray(leg?.steps) ? leg.steps : [];
+      for (const step of legSteps) {
+        const start = toPolicyPoint(step?.start_location);
+        const end = toPolicyPoint(step?.end_location);
+        if (!start || !end) continue;
+
+        steps.push({
+          distance: step?.distance ?? null,
+          duration: step?.duration ?? null,
+          html_instructions: String(step?.instructions ?? step?.html_instructions ?? ""),
+          start_location: start,
+          end_location: end,
+          maneuver: typeof step?.maneuver === "string" ? step.maneuver : null,
+          polyline: typeof step?.encoded_lat_lngs === "string" ? step.encoded_lat_lngs : null,
+        });
+
+        const stepPath = Array.isArray(step?.path) ? step.path : [];
+        if (stepPath.length > 0) {
+          for (const pathPoint of stepPath) {
+            const p = toPolicyPoint(pathPoint);
+            if (p && !areNear(densePath[densePath.length - 1] ?? null, p)) densePath.push(p);
+          }
+          continue;
+        }
+
+        if (!areNear(densePath[densePath.length - 1] ?? null, start)) densePath.push(start);
+        if (!areNear(densePath[densePath.length - 1] ?? null, end)) densePath.push(end);
+      }
+    }
+
+    if (densePath.length < 2) return null;
+
+    let distanceM = 0;
+    let durationS = 0;
+    for (const leg of legs) {
+      distanceM += Number(leg?.distance?.value ?? 0);
+      durationS += Number(leg?.duration?.value ?? 0);
+    }
+
+    return {
+      source: "routebuilder_directions",
+      fetchedAt: new Date().toISOString(),
+      overviewPolyline:
+        typeof route?.overview_polyline === "string"
+          ? route.overview_polyline
+          : typeof route?.overview_polyline?.points === "string"
+            ? route.overview_polyline.points
+            : null,
+      steps,
+      densePath,
+      totals: {
+        distanceM,
+        durationS,
+        distanceKm: distanceM / 1000,
+        durationMin: durationS / 60,
+      },
+    };
+  };
+
+  const saveRoute = async () => {
+    const title = routeTitle.trim();
+    if (!title) {
+      setSaveMessageTone("error");
+      setSaveMessage("Ingresa un nombre para la ruta.");
+      return;
+    }
+
+    const route = getRenderedRoutePoints();
+    if (route.length < 2) {
+      setSaveMessageTone("error");
+      setSaveMessage("Primero traza una ruta valida en el mapa.");
+      return;
+    }
+
+    setSaveLoading(true);
+    setSaveMessage("");
+    setSaveMessageTone("");
+    try {
+      const googleDraft = getRenderedGoogleDraft();
+
+      const res = await fetch("/api/routes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, route, googleDraft }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.ok) {
+        setSaveMessageTone("error");
+        setSaveMessage("No se pudo guardar la ruta.");
+        return;
+      }
+      setSaveMessageTone("ok");
+      setSaveMessage("Ruta guardada correctamente.");
+      const createdId = String(json?.id ?? "").trim();
+      setSaveModal({
+        open: true,
+        title: "Ruta guardada",
+        message: "¿Deseas validar la ruta en el editor activo?",
+        nextHref: createdId ? `/routes/editor?routeId=${createdId}` : undefined,
+      });
+    } catch {
+      setSaveMessageTone("error");
+      setSaveMessage("No se pudo guardar la ruta.");
+    } finally {
+      setSaveLoading(false);
+    }
+  };
+
   const statusLabel =
     status === "loading"
       ? "Cargando Google Maps..."
@@ -850,11 +1061,15 @@ export default function RouteBuilderMap() {
         onToggleCollapsed={() => setSidebarCollapsed((prev) => !prev)}
         statusLabel={statusLabel}
         isReady={status === "ready"}
+        routeTitle={routeTitle}
         origin={origin}
         destination={destination}
         waypoints={waypoints}
         routeLoading={routeLoading}
         routeError={routeError}
+        saveLoading={saveLoading}
+        saveMessage={saveMessage}
+        saveMessageTone={saveMessageTone}
         originInputRef={originInputRef}
         destinationInputRef={destinationInputRef}
         setWaypointInputRef={(index, el) => {
@@ -869,12 +1084,76 @@ export default function RouteBuilderMap() {
         onMoveWaypointDown={moveWaypointDown}
         onCalculateRoute={calculateRoute}
         onClearRoute={clearRoute}
+        onRouteTitleChange={setRouteTitle}
+        onSaveRoute={saveRoute}
       />
 
       <div style={{ position: "relative", zIndex: 1, minWidth: 0, background: "#e2e8f0" }}>
         <MapUndoOverlay visible={canUndoRouteEdit} onUndo={undoRouteEdit} />
         <div ref={mapDivRef} style={{ width: "100%", height: "100%" }} />
       </div>
+
+      {saveModal.open ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15,23,42,0.55)",
+            display: "grid",
+            placeItems: "center",
+            padding: 16,
+            zIndex: 20000,
+          }}
+        >
+          <div
+            style={{
+              width: "min(420px, 100%)",
+              background: "var(--surface)",
+              color: "var(--foreground)",
+              border: "1px solid var(--border)",
+              borderRadius: 12,
+              padding: 16,
+            }}
+          >
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>{saveModal.title}</div>
+            <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 14 }}>{saveModal.message}</div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => setSaveModal((prev) => ({ ...prev, open: false }))}
+                style={{
+                  border: "1px solid var(--border)",
+                  background: "var(--surface)",
+                  color: "var(--foreground)",
+                  borderRadius: 8,
+                  padding: "8px 10px",
+                  cursor: "pointer",
+                }}
+              >
+                No por ahora
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const href = saveModal.nextHref;
+                  setSaveModal((prev) => ({ ...prev, open: false }));
+                  if (href) router.push(href);
+                }}
+                style={{
+                  border: "1px solid #0f766e",
+                  background: "#0d9488",
+                  color: "#fff",
+                  borderRadius: 8,
+                  padding: "8px 10px",
+                  cursor: "pointer",
+                }}
+              >
+                Si, validar ahora
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
