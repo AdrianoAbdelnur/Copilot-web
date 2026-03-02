@@ -62,6 +62,14 @@ export default function Home() {
         tone: "orange",
       },
       {
+        href: "/trips",
+        title: "Asignación de viajes",
+        description: "Asigná una ruta a uno o varios choferes, con fecha/hora de inicio y comentarios operativos.",
+        badge: "Despacho",
+        icon: "assignment_ind",
+        tone: "primary",
+      },
+      {
         href: "/trips/live",
         title: "Monitoreo en vivo",
         description: "Visualizá drivers activos en mapa con posición, estado y velocidad actual.",
@@ -89,17 +97,17 @@ export default function Home() {
     primary: {
       icon: "bg-blue-50 text-blue-600",
       badge: "bg-blue-50 text-blue-700",
-      button: "bg-[#137fec] text-white hover:bg-[#126fd0]",
+      button: "bg-[#137fec] text-white border border-[#126fd0] hover:bg-[#126fd0]",
     },
     indigo: {
       icon: "bg-indigo-50 text-indigo-600",
       badge: "bg-indigo-50 text-indigo-700",
-      button: "bg-slate-900 text-white hover:bg-slate-800",
+      button: "bg-[#137fec] text-white border border-[#126fd0] hover:bg-[#126fd0]",
     },
     orange: {
       icon: "bg-orange-50 text-orange-600",
       badge: "bg-orange-50 text-orange-700",
-      button: "bg-white text-slate-900 border border-slate-200 hover:bg-slate-50",
+      button: "bg-[#137fec] text-white border border-[#126fd0] hover:bg-[#126fd0]",
     },
   };
 
@@ -113,7 +121,7 @@ export default function Home() {
                 <span className="h-2 w-2 animate-pulse rounded-full bg-[#137fec]" />
                 Centro de control
               </div>
-              <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">Resumen operativo</h1>
+              <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">Panel operativo</h1>
               <p className="mt-1 text-sm text-slate-500">Acceso rápido a módulos de rutas, viajes y administración.</p>
             </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -125,11 +133,14 @@ export default function Home() {
           </div>
         </header>
 
-        <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+        <section className="flex flex-wrap justify-center gap-6">
           {cards.map((card) => {
             const tone = toneClasses[card.tone];
             return (
-              <div key={card.href} className="min-w-0 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+              <div
+                key={card.href}
+                className="min-w-0 w-full md:w-[calc(50%-0.75rem)] xl:w-[calc(33.333%-1rem)] rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              >
                 <div className="mb-4 flex items-start justify-between gap-2">
                   <div className={`inline-flex h-11 w-11 items-center justify-center rounded-xl ${tone.icon}`}>
                     <span className="material-symbols-outlined text-xl">{card.icon}</span>
@@ -138,7 +149,7 @@ export default function Home() {
                 </div>
 
                 <h2 className="truncate text-lg font-bold tracking-tight">{card.title}</h2>
-                <p className="mt-1 min-h-12 break-words text-sm leading-relaxed text-slate-500">{card.description}</p>
+                <p className="mt-1 min-h-12 wrap-break-word text-sm leading-relaxed text-slate-500">{card.description}</p>
 
                 <Link
                   href={card.href}
