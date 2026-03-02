@@ -15,11 +15,8 @@ export function getAuthPayload(req: Request): AuthPayload | null {
 
   const authHeader = (req.headers.get("authorization") || "").trim();
 
-  const tokenFromAuth = authHeader.startsWith("Bearer ")
-    ? authHeader.slice(7).trim()
-    : authHeader.length
-      ? authHeader
-      : null;
+  // Mobile clients send the raw JWT token in Authorization (without "Bearer ").
+  const tokenFromAuth = authHeader.length ? authHeader : null;
 
   const cookieHeader = req.headers.get("cookie") || "";
   const cookieToken = cookieHeader

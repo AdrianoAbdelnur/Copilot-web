@@ -750,7 +750,6 @@ function RoutesPageContent() {
         { href: "/trips", label: esText.nav.trips },
         { href: "/admin", label: esText.nav.admin },
       ]}
-      actions={<Button onClick={loadList}>{t.refresh}</Button>}
     >
       <div className="grid gap-4">
         <Card className="hidden">
@@ -853,7 +852,7 @@ function RoutesPageContent() {
                       variant="primary"
                       onClick={runFullProcess}
                       disabled={runningPipeline || !selectedId}
-                      className="h-12 w-full text-base font-extrabold shadow-lg shadow-slate-900/30"
+                      className="h-14 w-full rounded-xl !border-[#1d4ed8] !bg-[#2563eb] text-base font-black text-white shadow-lg shadow-blue-900/30 transition hover:!bg-[#1d4ed8] hover:shadow-xl hover:shadow-blue-900/40 active:translate-y-[1px] disabled:!border-slate-300 disabled:!bg-slate-200 disabled:!text-slate-500"
                     >
                       {runningPipeline ? "Procesando ruta..." : "Procesar ruta"}
                     </Button>
