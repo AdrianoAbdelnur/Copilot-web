@@ -152,7 +152,7 @@ export default function Home() {
           })}
         </section>
 
-        <section className="mt-8 grid gap-6 lg:grid-cols-[1.1fr_1fr]">
+        <section className="mt-8">
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-bold">Acciones frecuentes</h3>
@@ -163,22 +163,6 @@ export default function Home() {
               <QuickAction href="/routes/marks" icon="place" title="POIs y tramos" subtitle="Editor de mapa" />
               <QuickAction href="/trips" icon="alt_route" title="Asignar viajes" subtitle="Despacho y monitoreo" />
               <QuickAction href="/routes/create" icon="upload_file" title="Cargar ruta" subtitle="KML o RouteBuilder" />
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-bold">Estado del sistema</h3>
-              <button className="text-sm font-semibold text-[#137fec] hover:underline" type="button">
-                Ver más
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <ActivityItem color="bg-emerald-500" title="API de viajes" subtitle="Operativa" detail="Eventos y samples disponibles" />
-              <ActivityItem color="bg-blue-500" title="Rutas" subtitle="Editor habilitado" detail="Compilar / validar / fusionar" />
-              <ActivityItem color="bg-amber-500" title="Monitoreo" subtitle="En revisión" detail="Panel de viajes en curso activo" />
-              {isAdmin ? <ActivityItem color="bg-violet-500" title="Administración" subtitle="Habilitada" detail="CRUD de usuarios y roles" /> : null}
             </div>
           </div>
         </section>
@@ -216,15 +200,3 @@ function QuickAction({ href, icon, title, subtitle, disabled }: { href: string; 
   return <Link href={href}>{content}</Link>;
 }
 
-function ActivityItem({ color, title, subtitle, detail }: { color: string; title: string; subtitle: string; detail: string }) {
-  return (
-    <div className="flex gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-      <div className={`mt-1 h-2.5 w-2.5 rounded-full ${color}`} />
-      <div className="min-w-0">
-        <div className="truncate text-sm font-semibold text-slate-900">{title}</div>
-        <div className="truncate text-xs text-slate-500">{subtitle}</div>
-        <div className="break-words text-xs text-slate-400 mt-1">{detail}</div>
-      </div>
-    </div>
-  );
-}

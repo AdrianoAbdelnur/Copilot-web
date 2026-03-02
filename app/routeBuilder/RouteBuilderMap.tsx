@@ -39,6 +39,8 @@ export default function RouteBuilderMap() {
   const originInputRef = useRef<HTMLInputElement | null>(null);
   const destinationInputRef = useRef<HTMLInputElement | null>(null);
   const waypointInputRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const waypointsRef = useRef<string[]>([]);
+  const drawRouteMarkersRef = useRef<(result: any) => void>(() => {});
   const [status, setStatus] = useState<"loading" | "ready" | "error" | "missing-key">("loading");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [routeTitle, setRouteTitle] = useState("");
@@ -60,6 +62,10 @@ export default function RouteBuilderMap() {
   const [isClickDrawing, setIsClickDrawing] = useState(false);
   const [isMapReady, setIsMapReady] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    waypointsRef.current = waypoints;
+  }, [waypoints]);
 
   const setClickDrawingMode = (value: boolean) => {
     isClickDrawingRef.current = value;
@@ -553,7 +559,7 @@ export default function RouteBuilderMap() {
       if (!result) return;
       if (isApplyingHistoryRef.current) return;
       pushRouteHistory(result);
-      drawRouteMarkers(result);
+      drawRouteMarkersRef.current(result);
     });
 
     setIsMapReady(true);
@@ -712,15 +718,62 @@ export default function RouteBuilderMap() {
     const legs = Array.isArray(route?.legs) ? route.legs : [];
     if (legs.length === 0) return;
     const requestWaypoints = Array.isArray(result?.request?.waypoints) ? result.request.waypoints : [];
+    const intermediateCount = Math.max(0, legs.length - 1);
+    const desiredWaypointCount = waypointsRef.current.map((value) => value.trim()).filter(Boolean).length;
+    const waypointLegIndices = new Set<number>();
+
+    for (let index = 0; index < intermediateCount; index += 1) {
+      const requestWaypoint = requestWaypoints[index];
+      if (requestWaypoint && requestWaypoint.stopover !== false) waypointLegIndices.add(index);
+    }
+
+    // Drag-to-edit can turn original stopovers into via points (stopover=false).
+    // Keep waypoint markers aligned with sidebar-selected waypoints.
+    if (waypointLegIndices.size < desiredWaypointCount) {
+      const desiredPositions = waypointPreviewPositionsRef.current
+        .map((position) => getLatLngLiteral(position))
+        .filter(Boolean) as Array<{ lat: number; lng: number }>;
+      const candidateIndices = Array.from({ length: intermediateCount }, (_, i) => i).filter(
+        (index) => !waypointLegIndices.has(index),
+      );
+      const usedCandidateIndices = new Set<number>();
+
+      for (const desiredPos of desiredPositions) {
+        if (waypointLegIndices.size >= desiredWaypointCount) break;
+
+        let bestIndex = -1;
+        let bestDistance = Number.POSITIVE_INFINITY;
+
+        for (const candidateIndex of candidateIndices) {
+          if (usedCandidateIndices.has(candidateIndex)) continue;
+          const endPos = getLatLngLiteral(legs[candidateIndex]?.end_location);
+          if (!endPos) continue;
+          const dLat = endPos.lat - desiredPos.lat;
+          const dLng = endPos.lng - desiredPos.lng;
+          const distance = dLat * dLat + dLng * dLng;
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            bestIndex = candidateIndex;
+          }
+        }
+
+        if (bestIndex >= 0) {
+          waypointLegIndices.add(bestIndex);
+          usedCandidateIndices.add(bestIndex);
+        }
+      }
+
+      for (let index = 0; index < intermediateCount && waypointLegIndices.size < desiredWaypointCount; index += 1) {
+        waypointLegIndices.add(index);
+      }
+    }
 
     const points: Array<{ kind: "origin" | "destination" | "waypoint" | "anchor"; position: any }> = [
       { kind: "origin", position: legs[0]?.start_location },
       ...legs.map((leg: any, index: number) => {
         if (index === legs.length - 1) return { kind: "destination" as const, position: leg?.end_location };
-        const requestWaypoint = requestWaypoints[index];
-        const isStopover = requestWaypoint ? requestWaypoint.stopover !== false : false;
         return {
-          kind: isStopover ? ("waypoint" as const) : ("anchor" as const),
+          kind: waypointLegIndices.has(index) ? ("waypoint" as const) : ("anchor" as const),
           position: leg?.end_location,
         };
       }),
@@ -783,6 +836,7 @@ export default function RouteBuilderMap() {
       routeMarkersRef.current.push(marker);
     }
   };
+  drawRouteMarkersRef.current = drawRouteMarkers;
 
   const calculateRoute = async () => {
     if (!directionsServiceRef.current || !window.google?.maps) return;

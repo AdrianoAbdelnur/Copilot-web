@@ -29,6 +29,21 @@ export default function usePlacesAutocomplete({
   const waypointAutocompleteListenersRef = useRef<any[]>([]);
   const originAutocompleteListenerRef = useRef<any>(null);
   const destinationAutocompleteListenerRef = useRef<any>(null);
+  const onOriginSelectedRef = useRef(onOriginSelected);
+  const onDestinationSelectedRef = useRef(onDestinationSelected);
+  const onWaypointSelectedRef = useRef(onWaypointSelected);
+
+  useEffect(() => {
+    onOriginSelectedRef.current = onOriginSelected;
+  }, [onOriginSelected]);
+
+  useEffect(() => {
+    onDestinationSelectedRef.current = onDestinationSelected;
+  }, [onDestinationSelected]);
+
+  useEffect(() => {
+    onWaypointSelectedRef.current = onWaypointSelected;
+  }, [onWaypointSelected]);
 
   useEffect(() => {
     if (status !== "ready") return;
@@ -42,7 +57,7 @@ export default function usePlacesAutocomplete({
       originAutocompleteListenerRef.current = originAutocompleteRef.current.addListener("place_changed", () => {
         const place = originAutocompleteRef.current?.getPlace?.();
         const value = place?.formatted_address || place?.name || originInputRef.current?.value || "";
-        onOriginSelected(value, place?.geometry?.location ?? null);
+        onOriginSelectedRef.current(value, place?.geometry?.location ?? null);
       });
     }
 
@@ -58,11 +73,11 @@ export default function usePlacesAutocomplete({
         () => {
           const place = destinationAutocompleteRef.current?.getPlace?.();
           const value = place?.formatted_address || place?.name || destinationInputRef.current?.value || "";
-          onDestinationSelected(value, place?.geometry?.location ?? null);
+          onDestinationSelectedRef.current(value, place?.geometry?.location ?? null);
         },
       );
     }
-  }, [destinationInputRef, onDestinationSelected, onOriginSelected, originInputRef, status]);
+  }, [destinationInputRef, originInputRef, status]);
 
   useEffect(() => {
     if (status !== "ready") return;
@@ -72,21 +87,22 @@ export default function usePlacesAutocomplete({
     waypointAutocompleteListenersRef.current = [];
     waypointAutocompletesRef.current = [];
 
-    waypointInputRefs.current.forEach((inputEl, index) => {
-      if (!inputEl) return;
+    for (let index = 0; index < waypointCount; index += 1) {
+      const inputEl = waypointInputRefs.current[index];
+      if (!inputEl) continue;
       const ac = new window.google.maps.places.Autocomplete(inputEl, {
         fields: ["formatted_address", "geometry", "name"],
       });
       const listener = ac.addListener("place_changed", () => {
         const place = ac.getPlace?.();
         const value = place?.formatted_address || place?.name || inputEl.value || "";
-        onWaypointSelected(index, value, place?.geometry?.location ?? null);
+        onWaypointSelectedRef.current(index, value, place?.geometry?.location ?? null);
       });
 
       waypointAutocompletesRef.current.push(ac);
       waypointAutocompleteListenersRef.current.push(listener);
-    });
-  }, [onWaypointSelected, status, waypointCount, waypointInputRefs]);
+    }
+  }, [status, waypointCount, waypointInputRefs]);
 
   useEffect(() => {
     return () => {
