@@ -37,11 +37,16 @@ type TripPlanItem = {
 
 type TripItem = {
   _id: string;
+  title?: string;
+  notes?: string;
   userId: PopulatedUserRef;
   routeId: PopulatedRouteRef;
   status: "active" | "paused" | "finished" | "aborted";
   startedAt: string;
   endedAt?: string | null;
+  live?: {
+    pos?: { latitude?: number; longitude?: number } | null;
+  } | null;
   totals?: Record<string, number>;
 };
 
@@ -169,6 +174,7 @@ export default function TripsPage() {
   const [liveTrips, setLiveTrips] = useState<TripItem[]>([]);
 
   const [selectedTripId, setSelectedTripId] = useState("");
+  const [selectedPlanId, setSelectedPlanId] = useState("");
   const [tripDetail, setTripDetail] = useState<any>(null);
   const [tripEvents, setTripEvents] = useState<any[]>([]);
   const [tripSamples, setTripSamples] = useState<any[]>([]);
@@ -179,12 +185,22 @@ export default function TripsPage() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isEditTripModalOpen, setIsEditTripModalOpen] = useState(false);
+  const [canManageTrips, setCanManageTrips] = useState(false);
+  const [tripActionLoading, setTripActionLoading] = useState(false);
 
   const [formDriverIds, setFormDriverIds] = useState<string[]>([]);
   const [formRouteId, setFormRouteId] = useState("");
   const [formStartAt, setFormStartAt] = useState("");
   const [formTitle, setFormTitle] = useState("");
   const [formNotes, setFormNotes] = useState("");
+
+  const [editTripId, setEditTripId] = useState("");
+  const [editTripTitle, setEditTripTitle] = useState("");
+  const [editTripNotes, setEditTripNotes] = useState("");
+  const [editTripStatus, setEditTripStatus] = useState<TripItem["status"]>("active");
+  const [editTripStartedAt, setEditTripStartedAt] = useState("");
+  const [editTripEndedAt, setEditTripEndedAt] = useState("");
 
   const userById = useMemo(() => {
     const map = new Map<string, UserItem>();
@@ -202,25 +218,30 @@ export default function TripsPage() {
     setLoading(true);
     setMsg("");
     try {
-      const [usersRes, routesRes, plansRes, liveRes] = await Promise.all([
+      const [usersRes, routesRes, plansRes, liveRes, meRes] = await Promise.all([
         fetch("/api/users?paginated=false"),
         fetch("/api/routes"),
         fetch("/api/trip-plans?limit=200", { headers: authHeaders() }),
         fetch("/api/trips/live?limit=200", { headers: authHeaders() }),
+        fetch("/api/users/me", { headers: authHeaders() }),
       ]);
 
       const usersJson = await usersRes.json().catch(() => ({}));
       const routesJson = await routesRes.json().catch(() => ({}));
       const plansJson = await plansRes.json().catch(() => ({}));
       const liveJson = await liveRes.json().catch(() => ({}));
+      const meJson = await meRes.json().catch(() => ({}));
 
       const users = (usersJson?.users || []) as UserItem[];
       const driverCandidates = users.filter((u) => String(u.role || "").toLowerCase() === "driver");
+      const role = String(meJson?.user?.role || "").toLowerCase();
+      const canManage = role === "dispatcher" || role === "manager" || role === "admin" || role === "superadmin";
 
       setDrivers(driverCandidates);
       setRoutes((routesJson?.items || []) as RouteItem[]);
       setPlans((plansJson?.items || []) as TripPlanItem[]);
       setLiveTrips((liveJson?.items || []) as TripItem[]);
+      setCanManageTrips(canManage);
 
       if (formDriverIds.length === 0 && driverCandidates[0]?._id) setFormDriverIds([driverCandidates[0]._id]);
       if (!formRouteId && routesJson?.items?.[0]?._id) setFormRouteId(routesJson.items[0]._id);
@@ -283,7 +304,112 @@ export default function TripsPage() {
     await loadAll();
   };
 
+  const openEditTripModal = (trip: TripItem) => {
+    setEditTripId(trip._id);
+    setEditTripTitle(String(trip?.title || ""));
+    setEditTripNotes(String(trip?.notes || ""));
+    setEditTripStatus(trip.status);
+    setEditTripStartedAt(trip?.startedAt ? new Date(trip.startedAt).toISOString().slice(0, 16) : "");
+    setEditTripEndedAt(trip?.endedAt ? new Date(trip.endedAt).toISOString().slice(0, 16) : "");
+    setIsEditTripModalOpen(true);
+  };
+
+  const saveTripEdits = async () => {
+    if (!editTripId) return;
+    setTripActionLoading(true);
+    try {
+      const res = await fetch(`/api/trips/${editTripId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({
+          title: editTripTitle,
+          notes: editTripNotes,
+          status: editTripStatus,
+          startedAt: editTripStartedAt ? new Date(editTripStartedAt).toISOString() : undefined,
+          endedAt: editTripEndedAt ? new Date(editTripEndedAt).toISOString() : null,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.ok) {
+        setMsg(json?.error || "No se pudo editar el viaje.");
+        return;
+      }
+      setIsEditTripModalOpen(false);
+      setMsg("Viaje actualizado.");
+      await loadAll();
+      if (selectedTripId === editTripId) await loadTripDetail(editTripId);
+    } finally {
+      setTripActionLoading(false);
+    }
+  };
+
+  const finalizeTrip = async (trip: TripItem) => {
+    if (!canManageTrips) return;
+    if (trip.status === "finished" || trip.status === "aborted") {
+      setMsg("El viaje ya está cerrado.");
+      return;
+    }
+    setTripActionLoading(true);
+    try {
+      const fallbackLat = Number(trip?.live?.pos?.latitude);
+      const fallbackLng = Number(trip?.live?.pos?.longitude);
+      const patch: Record<string, any> = {
+        status: "finished",
+        endedAt: new Date().toISOString(),
+      };
+      if (Number.isFinite(fallbackLat) && Number.isFinite(fallbackLng)) {
+        patch.endPos = { latitude: fallbackLat, longitude: fallbackLng };
+      }
+
+      const res = await fetch(`/api/trips/${trip._id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify(patch),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.ok) {
+        setMsg(json?.error || "No se pudo finalizar el viaje.");
+        return;
+      }
+      setMsg("Viaje finalizado.");
+      await loadAll();
+      if (selectedTripId === trip._id) await loadTripDetail(trip._id);
+    } finally {
+      setTripActionLoading(false);
+    }
+  };
+
+  const deleteTrip = async (trip: TripItem) => {
+    if (!canManageTrips) return;
+    const confirmed = window.confirm(`¿Eliminar el viaje #${trip._id.slice(-6)}? Esta acción no se puede deshacer.`);
+    if (!confirmed) return;
+
+    setTripActionLoading(true);
+    try {
+      const res = await fetch(`/api/trips/${trip._id}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.ok) {
+        setMsg(json?.error || "No se pudo eliminar el viaje.");
+        return;
+      }
+      if (selectedTripId === trip._id) {
+        setSelectedTripId("");
+        setTripDetail(null);
+        setTripEvents([]);
+        setTripSamples([]);
+      }
+      setMsg("Viaje eliminado.");
+      await loadAll();
+    } finally {
+      setTripActionLoading(false);
+    }
+  };
+
   const loadTripDetail = async (tripId: string) => {
+    setSelectedPlanId("");
     setSelectedTripId(tripId);
     const [tripRes, eventsRes, samplesRes] = await Promise.all([
       fetch(`/api/trips/${tripId}`, { headers: authHeaders() }),
@@ -321,6 +447,17 @@ export default function TripsPage() {
       return true;
     });
   }, [liveTrips, driverFilter, statusFilter]);
+
+  const filteredPendingPlans = useMemo(() => {
+    return plans.filter((plan) => {
+      if (plan.tripId) return false;
+      if (!(plan.status === "planned" || plan.status === "assigned" || plan.status === "in_progress")) return false;
+      if (statusFilter) return false;
+      if (!driverFilter) return true;
+      const id = typeof plan.driverUserId === "string" ? plan.driverUserId : String(plan.driverUserId?._id || "");
+      return id === driverFilter;
+    });
+  }, [plans, statusFilter, driverFilter]);
 
   useEffect(() => {
     let cancelled = false;
@@ -478,6 +615,48 @@ export default function TripsPage() {
             </div>
 
             <div className="max-h-[680px] space-y-3 overflow-auto p-4">
+              {filteredPendingPlans.map((plan) => {
+                const planId = String(plan._id || "");
+                const selected = selectedPlanId === planId;
+                const routeLabel =
+                  typeof plan.routeId === "string" ? (routeById.get(plan.routeId)?.title || plan.routeId) : displayRouteRef(plan.routeId);
+                const driverLabel =
+                  typeof plan.driverUserId === "string"
+                    ? displayName(userById.get(plan.driverUserId) || { _id: plan.driverUserId })
+                    : displayDriverRef(plan.driverUserId);
+                const plannedDate = plan.plannedStartAt ? new Date(plan.plannedStartAt).toLocaleString() : "-";
+                return (
+                  <button
+                    key={`plan-${planId}`}
+                    onClick={() => {
+                      setSelectedPlanId(planId);
+                      setSelectedTripId("");
+                      setTripDetail(null);
+                      setTripEvents([]);
+                      setTripSamples([]);
+                    }}
+                    className={`w-full rounded-xl border-l-4 bg-white p-4 text-left shadow-sm transition hover:shadow-md ${
+                      selected ? "border-l-amber-500 ring-2 ring-amber-300/30" : "border-l-amber-400"
+                    } border border-slate-200`}
+                  >
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="mb-1 flex flex-wrap items-center gap-2">
+                          <span className="rounded bg-slate-50 px-2 py-1 text-[11px] font-bold text-slate-500">plan #{planId.slice(-6)}</span>
+                          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">{planStatusLabel(plan.status)}</span>
+                        </div>
+                        <div className="truncate text-sm font-bold text-slate-900">{plan.title?.trim() || routeLabel}</div>
+                        <div className="mt-0.5 text-xs text-slate-500">Chofer: {driverLabel}</div>
+                        <div className="mt-0.5 text-xs text-slate-500">Inicio programado: {plannedDate}</div>
+                      </div>
+                      <span className="shrink-0 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-700">
+                        Pendiente
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+
               {filteredLiveTrips.map((trip) => {
                 const selected = selectedTripId === trip._id;
                 const samplesCount = Number(trip?.totals?.samplesCount ?? 0);
@@ -512,9 +691,12 @@ export default function TripsPage() {
                           </span>
                         </div>
                         <div className="truncate text-sm font-bold text-slate-900">
-                          {tripRouteLabelValue(trip, routeById)}
+                          {trip.title?.trim() || tripRouteLabelValue(trip, routeById)}
                         </div>
                         <div className="mt-0.5 text-xs text-slate-500">Chofer: {tripDriverDisplayValue(trip, userById)}</div>
+                        {trip.title?.trim() ? (
+                          <div className="mt-0.5 truncate text-[11px] text-slate-500">Ruta: {tripRouteLabelValue(trip, routeById)}</div>
+                        ) : null}
                       </div>
                       <Link
                         href={`/trips/${trip._id}`}
@@ -543,7 +725,7 @@ export default function TripsPage() {
                 );
               })}
 
-              {filteredLiveTrips.length === 0 ? (
+              {filteredLiveTrips.length === 0 && filteredPendingPlans.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
                   No hay viajes con ese filtro.
                 </div>
@@ -573,11 +755,45 @@ export default function TripsPage() {
                 </div>
               ) : (
                 <div className="space-y-5">
+                  {canManageTrips ? (
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => finalizeTrip(tripDetail as TripItem)}
+                        disabled={tripActionLoading || tripDetail.status === "finished" || tripDetail.status === "aborted"}
+                        className="inline-flex items-center gap-2 rounded-lg bg-[#137fec] px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-[#126fd0] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <span className="material-symbols-outlined text-sm">flag</span>
+                        Finalizar viaje
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openEditTripModal(tripDetail as TripItem)}
+                        disabled={tripActionLoading}
+                        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <span className="material-symbols-outlined text-sm">edit</span>
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteTrip(tripDetail as TripItem)}
+                        disabled={tripActionLoading}
+                        className="inline-flex items-center gap-2 rounded-lg border border-rose-700 bg-rose-600 px-3 py-2 text-xs font-semibold text-white shadow-sm shadow-rose-900/25 transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:border-slate-500 disabled:bg-slate-600 disabled:text-slate-300 disabled:opacity-100"
+                      >
+                        <span className="material-symbols-outlined text-sm">delete</span>
+                        Eliminar
+                      </button>
+                    </div>
+                  ) : null}
+
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <DetailStat label="Chofer" value={resolveDriverDisplayFromTripDetail(tripDetail, userById)} />
                     <DetailStat label="Estado" value={tripStatusLabel(tripDetail.status)} />
                     <DetailStat label="Inicio" value={new Date(tripDetail.startedAt).toLocaleString()} />
                     <DetailStat label="Fin" value={tripDetail.endedAt ? new Date(tripDetail.endedAt).toLocaleString() : "-"} />
+                    <DetailStat label="Título" value={String(tripDetail?.title || "-")} />
+                    <DetailStat label="Notas" value={String(tripDetail?.notes || "-")} />
                     <DetailStat
                       label="Distancia"
                       value={`${tripDetailRealDistanceM || Number(tripDetail?.totals?.distanceM ?? 0) || 0}m`}
@@ -663,6 +879,95 @@ export default function TripsPage() {
           </section>
         </div>
       </div>
+
+      {isEditTripModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
+              <div>
+                <h2 className="text-lg font-bold tracking-tight">Editar viaje</h2>
+                <p className="mt-1 text-xs text-slate-500">Actualiza estado, fechas y detalles operativos</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditTripModalOpen(false)}
+                className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                aria-label="Cerrar"
+              >
+                <span className="material-symbols-outlined text-base">close</span>
+              </button>
+            </div>
+            <div className="space-y-4 p-5">
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-700">Estado</label>
+                <select
+                  value={editTripStatus}
+                  onChange={(e) => setEditTripStatus(e.target.value as TripItem["status"])}
+                  className="h-11 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-[#137fec]"
+                >
+                  <option value="active">activo</option>
+                  <option value="paused">pausado</option>
+                  <option value="finished">finalizado</option>
+                  <option value="aborted">abortado</option>
+                </select>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-700">Inicio</label>
+                  <input
+                    type="datetime-local"
+                    value={editTripStartedAt}
+                    onChange={(e) => setEditTripStartedAt(e.target.value)}
+                    className="h-11 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-[#137fec]"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-700">Fin</label>
+                  <input
+                    type="datetime-local"
+                    value={editTripEndedAt}
+                    onChange={(e) => setEditTripEndedAt(e.target.value)}
+                    className="h-11 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-[#137fec]"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-700">Título</label>
+                <input
+                  value={editTripTitle}
+                  onChange={(e) => setEditTripTitle(e.target.value)}
+                  className="h-11 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-[#137fec]"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-700">Notas</label>
+                <textarea
+                  value={editTripNotes}
+                  onChange={(e) => setEditTripNotes(e.target.value)}
+                  className="min-h-24 w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm outline-none focus:border-[#137fec]"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-100 bg-slate-50/70 p-5">
+              <button
+                type="button"
+                onClick={() => setIsEditTripModalOpen(false)}
+                className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={saveTripEdits}
+                disabled={tripActionLoading}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#137fec] px-4 text-sm font-bold text-white shadow-sm shadow-[#137fec]/20 transition hover:bg-[#126fd0] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Guardar cambios
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {isCreateModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
@@ -769,7 +1074,7 @@ export default function TripsPage() {
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#137fec] px-4 text-sm font-bold text-white shadow-sm shadow-[#137fec]/20 transition hover:bg-[#126fd0]"
               >
                 <span className="material-symbols-outlined text-base">send</span>
-                Crear asignación
+                Crear viaje
               </button>
             </div>
           </div>

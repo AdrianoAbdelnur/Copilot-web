@@ -47,6 +47,8 @@ const LiveSnapshotSchema = new Schema(
 
 const TripSchema = new Schema(
   {
+    title: { type: String, default: "" },
+    notes: { type: String, default: "" },
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     routeId: { type: Schema.Types.ObjectId, ref: "Route", required: true, index: true },
     status: {
