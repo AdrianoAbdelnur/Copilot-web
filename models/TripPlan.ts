@@ -1,4 +1,5 @@
 import mongoose, { Schema, model, models } from "mongoose";
+import "@/models/RouteMap";
 
 const VehicleSchema = new Schema(
   {
@@ -38,4 +39,3 @@ export type TripPlanDoc = mongoose.InferSchemaType<typeof TripPlanSchema>;
 
 const TripPlan = models.TripPlan || model("TripPlan", TripPlanSchema);
 export default TripPlan;
-
