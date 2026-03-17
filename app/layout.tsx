@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Copiloto Virtual",
+  title: "Copilot web",
   description: "Panel de gestion de rutas y viajes",
 };
 
@@ -50,3 +50,4 @@ export default function RootLayout({
     </html>
   );
 }
+
