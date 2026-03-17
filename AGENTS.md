@@ -27,6 +27,8 @@ It exposes APIs consumed by the `copilotGM` mobile app.
 - Do not leave dead code.
 - Do not break existing API contracts with the mobile app.
 - Never commit or push directly to `main`.
+- Before any commit, run `npm run build` and ensure it finishes successfully.
+- Never commit if `npm run build` fails.
 
 ## Structure
 
