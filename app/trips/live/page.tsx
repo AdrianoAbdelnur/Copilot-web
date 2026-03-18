@@ -550,13 +550,21 @@ export default function LiveTripsMapPage() {
                           <span>Vel: {speed}</span>
                           <span>Act: {relativeTime(item.live.t)}</span>
                         </div>
-                        {/*
-                          Chat deshabilitado temporalmente para produccion.
-                          Rehabilitar cuando realtime quede desplegado en Render.
-                        */}
-                        <span className="rounded border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">
-                          Chat pronto
-                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setChatError("");
+                            setChatStatus("");
+                            setChatHistory([]);
+                            setChatHistoryError("");
+                            setChatHistoryOpen(false);
+                            setChatText("");
+                            setChatOpenForItemId(item.itemId);
+                          }}
+                          className="rounded border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700 hover:bg-sky-100"
+                        >
+                          Abrir chat
+                        </button>
                       </div>
                     </div>
                   </div>
