@@ -659,6 +659,14 @@ export default function LiveTripsMapPage() {
               <textarea
                 value={chatText}
                 onChange={(e) => setChatText(e.target.value.slice(0, 140))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    if (!chatSending && chatTarget?.tripId) {
+                      void sendChatMessage();
+                    }
+                  }
+                }}
                 rows={5}
                 maxLength={140}
                 placeholder="Escribe un mensaje para el chofer..."
