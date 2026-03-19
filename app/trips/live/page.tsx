@@ -131,7 +131,6 @@ export default function LiveTripsMapPage() {
   const [chatSending, setChatSending] = useState(false);
   const [chatError, setChatError] = useState("");
   const [chatStatus, setChatStatus] = useState("");
-  const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
   const [chatHistoryLoading, setChatHistoryLoading] = useState(false);
   const [chatHistoryError, setChatHistoryError] = useState("");
   const [chatHistory, setChatHistory] = useState<ChatMessageItem[]>([]);
@@ -141,6 +140,7 @@ export default function LiveTripsMapPage() {
   const markersRef = useRef<Map<string, any>>(new Map());
   const infoRef = useRef<any>(null);
   const autoSelectedRef = useRef(false);
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const filteredItems = useMemo(() => {
@@ -168,6 +168,16 @@ export default function LiveTripsMapPage() {
   const chatTarget = useMemo(
     () => items.find((item) => item.itemId === chatOpenForItemId) || null,
     [items, chatOpenForItemId],
+  );
+  const sortedChatHistory = useMemo(
+    () =>
+      [...chatHistory].sort((a, b) => {
+        const ta = Date.parse(a.createdAt || "") || 0;
+        const tb = Date.parse(b.createdAt || "") || 0;
+        if (ta !== tb) return ta - tb;
+        return String(a.id || "").localeCompare(String(b.id || ""));
+      }),
+    [chatHistory],
   );
 
   const centerOnDriver = useCallback((item: LiveItem) => {
@@ -210,7 +220,6 @@ export default function LiveTripsMapPage() {
     setChatText("");
     setChatError("");
     setChatStatus("");
-    setChatHistoryOpen(false);
     setChatHistoryError("");
     setChatHistory([]);
   }, []);
@@ -278,20 +287,18 @@ export default function LiveTripsMapPage() {
 
       setChatStatus("Mensaje enviado al chofer.");
       setChatText("");
-      if (chatHistoryOpen) {
-        await loadChatHistory();
-      }
+      await loadChatHistory();
     } catch {
       setChatError("Error de red enviando mensaje.");
     } finally {
       setChatSending(false);
     }
-  }, [chatHistoryOpen, chatTarget?.tripId, chatText, loadChatHistory]);
+  }, [chatTarget?.tripId, chatText, loadChatHistory]);
 
   useEffect(() => {
-    if (!chatHistoryOpen) return;
+    if (!chatOpenForItemId || !chatTarget?.tripId) return;
     void loadChatHistory();
-  }, [chatHistoryOpen, loadChatHistory]);
+  }, [chatOpenForItemId, chatTarget?.tripId, loadChatHistory]);
 
   useEffect(() => {
     if (!chatStatus) return;
@@ -300,12 +307,19 @@ export default function LiveTripsMapPage() {
   }, [chatStatus]);
 
   useEffect(() => {
-    if (!chatHistoryOpen) return;
+    if (!chatOpenForItemId || !chatTarget?.tripId) return;
     const t = setInterval(() => {
       void loadChatHistory();
     }, 4000);
     return () => clearInterval(t);
-  }, [chatHistoryOpen, loadChatHistory]);
+  }, [chatOpenForItemId, chatTarget?.tripId, loadChatHistory]);
+
+  useEffect(() => {
+    if (!chatOpenForItemId) return;
+    const node = chatScrollRef.current;
+    if (!node) return;
+    node.scrollTop = node.scrollHeight;
+  }, [chatOpenForItemId, sortedChatHistory, chatHistoryLoading]);
 
   useEffect(() => {
     let active = true;
@@ -557,15 +571,7 @@ export default function LiveTripsMapPage() {
                         </div>
                         <button
                           type="button"
-                          onClick={() => {
-                            setChatError("");
-                            setChatStatus("");
-                            setChatHistory([]);
-                            setChatHistoryError("");
-                            setChatHistoryOpen(false);
-                            setChatText("");
-                            setChatOpenForItemId(item.itemId);
-                          }}
+                          onClick={() => openChatModal(item)}
                           className="rounded border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700 hover:bg-sky-100"
                         >
                           Abrir chat
@@ -611,78 +617,51 @@ export default function LiveTripsMapPage() {
               ) : null}
 
               <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Conversacion</div>
                 <button
                   type="button"
-                  onClick={() => setChatHistoryOpen((v) => !v)}
+                  onClick={() => void loadChatHistory()}
                   className="rounded border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700"
                 >
-                  {chatHistoryOpen ? "Ocultar historial" : "Ver historial"}
+                  {chatHistoryLoading ? "Cargando..." : "Actualizar"}
                 </button>
-                {chatHistoryOpen ? (
-                  <button
-                    type="button"
-                    onClick={() => void loadChatHistory()}
-                    className="rounded border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700"
-                  >
-                    {chatHistoryLoading ? "Cargando..." : "Actualizar"}
-                  </button>
-                ) : null}
               </div>
 
-              {chatHistoryOpen ? (
-                <div className="mb-3 max-h-56 overflow-auto rounded border border-slate-200 bg-slate-50 p-2">
+              <div ref={chatScrollRef} className="mb-3 h-64 overflow-auto rounded border border-slate-200 bg-slate-50">
+                <div className="flex min-h-full flex-col justify-end gap-2 p-2">
                   {chatHistoryError ? (
-                    <div className="mb-2 rounded border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700">{chatHistoryError}</div>
+                    <div className="rounded border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700">{chatHistoryError}</div>
                   ) : null}
-                  {chatHistoryLoading ? (
-                    <div className="text-xs text-slate-500">Cargando historial...</div>
+                  {chatHistoryLoading && sortedChatHistory.length === 0 ? (
+                    <div className="text-xs text-slate-500">Cargando mensajes...</div>
                   ) : null}
-                  {!chatHistoryLoading && chatHistory.length === 0 ? (
+                  {!chatHistoryLoading && sortedChatHistory.length === 0 ? (
                     <div className="text-xs text-slate-500">No hay mensajes para este viaje.</div>
                   ) : null}
-                  {chatHistory.map((msg) => (
-                    <div
-                      key={msg.id}
-                      className={`mb-2 rounded border px-2 py-1 ${
-                        msg.senderType === "driver"
-                          ? "border-emerald-200 bg-emerald-50"
-                          : "border-slate-200 bg-white"
-                      }`}
-                    >
-                      <div className="mb-1 flex items-center justify-between gap-2">
-                        <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                          {msg.senderType === "driver"
-                            ? "Respuesta del chofer"
-                            : "Mensaje del despacho"}
-                        </div>
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                            msg.senderType === "driver"
-                              ? "bg-emerald-100 text-emerald-700"
-                              : "bg-slate-100 text-slate-600"
+                  {sortedChatHistory.map((msg) => {
+                    const isDriver = msg.senderType === "driver";
+                    return (
+                      <div key={msg.id} className={`flex ${isDriver ? "justify-start" : "justify-end"}`}>
+                        <div
+                          className={`max-w-[84%] rounded-2xl px-3 py-2 shadow-sm ${
+                            isDriver
+                              ? "border border-emerald-200 bg-emerald-50 text-emerald-950"
+                              : "border border-sky-200 bg-sky-50 text-sky-950"
                           }`}
                         >
-                          {messageOriginLabel(msg)}
-                        </span>
+                          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider opacity-80">
+                            {messageOriginLabel(msg)}
+                          </div>
+                          <div className="text-sm leading-snug">{msg.text}</div>
+                          <div className="mt-1 text-[11px] opacity-70">
+                            {formatDateTime(msg.createdAt)}
+                          </div>
+                        </div>
                       </div>
-                      <div className="text-sm text-slate-800">{msg.text}</div>
-                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500">
-                        <span>Enviado: {formatDateTime(msg.createdAt)}</span>
-                        {msg.deliveredAt || msg.status === "delivered" || msg.status === "spoken" || msg.status === "read" ? (
-                          <span>Recibido: {formatDateTime(msg.deliveredAt || msg.createdAt)}</span>
-                        ) : (
-                          <span>Recibido: pendiente</span>
-                        )}
-                        {msg.readAt || msg.status === "read" ? (
-                          <span>Leido: {formatDateTime(msg.readAt || msg.spokenAt || msg.deliveredAt || msg.createdAt)}</span>
-                        ) : (
-                          <span>Leido: pendiente</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
-              ) : null}
+              </div>
 
               <textarea
                 value={chatText}
