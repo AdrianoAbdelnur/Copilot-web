@@ -21,9 +21,16 @@ export async function emitDriverChatMessage({
     throw new Error("Missing INTERNAL_API_KEY (or REALTIME_INTERNAL_SECRET)");
   }
   const safeTripId = String(tripId || "").trim();
-  const data = (payload || {}) as { id?: string; text?: string };
+  const data = (payload || {}) as {
+    id?: string;
+    text?: string;
+    senderUserId?: string;
+    senderType?: string;
+  };
   const messageId = String(data.id || "").trim();
   const text = String(data.text || "").trim();
+  const senderUserId = String(data.senderUserId || "").trim();
+  const senderType = String(data.senderType || "").trim();
   if (!safeTripId || !messageId || !text) {
     throw new Error("Invalid realtime payload: tripId, id and text are required");
   }
@@ -34,7 +41,12 @@ export async function emitDriverChatMessage({
       "content-type": "application/json",
       "x-api-key": secret,
     },
-    body: JSON.stringify({ id: messageId, text }),
+    body: JSON.stringify({
+      id: messageId,
+      text,
+      senderUserId: senderUserId || undefined,
+      senderType: senderType || undefined,
+    }),
     cache: "no-store",
   });
 

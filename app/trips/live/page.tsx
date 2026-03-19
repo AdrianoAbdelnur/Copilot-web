@@ -25,6 +25,7 @@ type ChatMessageItem = {
   id: string;
   text: string;
   status: "sent" | "delivered" | "spoken" | "read" | string;
+  senderType?: "driver" | "dispatcher" | string;
   createdAt: string | null;
   deliveredAt: string | null;
   spokenAt: string | null;
@@ -84,6 +85,10 @@ function formatDateTime(iso: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function messageOriginLabel(message: ChatMessageItem): string {
+  return message.senderType === "driver" ? "Chofer" : "Despacho";
 }
 
 
@@ -636,7 +641,30 @@ export default function LiveTripsMapPage() {
                     <div className="text-xs text-slate-500">No hay mensajes para este viaje.</div>
                   ) : null}
                   {chatHistory.map((msg) => (
-                    <div key={msg.id} className="mb-2 rounded border border-slate-200 bg-white px-2 py-1">
+                    <div
+                      key={msg.id}
+                      className={`mb-2 rounded border px-2 py-1 ${
+                        msg.senderType === "driver"
+                          ? "border-emerald-200 bg-emerald-50"
+                          : "border-slate-200 bg-white"
+                      }`}
+                    >
+                      <div className="mb-1 flex items-center justify-between gap-2">
+                        <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                          {msg.senderType === "driver"
+                            ? "Respuesta del chofer"
+                            : "Mensaje del despacho"}
+                        </div>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                            msg.senderType === "driver"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          {messageOriginLabel(msg)}
+                        </span>
+                      </div>
                       <div className="text-sm text-slate-800">{msg.text}</div>
                       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500">
                         <span>Enviado: {formatDateTime(msg.createdAt)}</span>
