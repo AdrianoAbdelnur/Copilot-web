@@ -6,6 +6,8 @@ import { Server } from "socket.io";
 type InternalChatPayload = {
   id?: string;
   text?: string;
+  senderUserId?: string;
+  senderType?: string;
 };
 
 function parseAllowedOrigins(value: string | undefined): string[] {
@@ -57,6 +59,8 @@ app.post(
     const tripId = String(req.params.tripId || "").trim();
     const messageId = String(req.body?.id || "").trim();
     const text = String(req.body?.text || "").trim();
+    const senderUserId = String(req.body?.senderUserId || "").trim();
+    const senderType = String(req.body?.senderType || "").trim();
 
     if (!tripId || !messageId || !text) {
       res.status(400).json({ error: "tripId, id and text are required" });
@@ -67,6 +71,8 @@ app.post(
       id: messageId,
       tripId,
       text,
+      senderUserId: senderUserId || undefined,
+      senderType: senderType || undefined,
       createdAt: new Date().toISOString(),
     });
 

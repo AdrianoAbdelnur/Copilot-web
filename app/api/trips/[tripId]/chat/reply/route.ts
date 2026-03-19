@@ -4,7 +4,6 @@ import Trip from "@/models/Trip";
 import TripChatMessage from "@/models/TripChatMessage";
 import {
   getAuthUser,
-  isAdminRole,
   isValidObjectId,
   unauthorized,
 } from "@/app/api/trips/_helpers";
@@ -31,47 +30,10 @@ function toItem(doc: any) {
   };
 }
 
-export async function GET(req: Request, ctx: Ctx) {
-  try {
-    const auth = getAuthUser(req);
-    if (!auth) return unauthorized();
-
-    const { tripId } = await ctx.params;
-    if (!isValidObjectId(tripId)) {
-      return Response.json({ ok: false, error: "invalid_id" }, { status: 400 });
-    }
-
-    await connectDB();
-
-    const trip = await Trip.findById(tripId).select("userId").lean();
-    if (!trip) {
-      return Response.json({ ok: false, error: "trip_not_found" }, { status: 404 });
-    }
-
-    const driverUserId = String((trip as any).userId || "");
-    const adminMode = isAdminRole(auth.role);
-    if (!adminMode && auth.id !== driverUserId) {
-      return Response.json({ ok: false, error: "forbidden" }, { status: 403 });
-    }
-
-    const url = new URL(req.url);
-    const limitRaw = Number(url.searchParams.get("limit") || 50);
-    const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? Math.floor(limitRaw) : 50, 1), 200);
-
-    const rows = await TripChatMessage.find({ tripId }).sort({ createdAt: -1 }).limit(limit).lean();
-    return Response.json({ ok: true, items: rows.reverse().map((x) => toItem(x)) });
-  } catch {
-    return Response.json({ ok: false, error: "failed_to_list_trip_chat_messages" }, { status: 500 });
-  }
-}
-
 export async function POST(req: Request, ctx: Ctx) {
   try {
     const auth = getAuthUser(req);
     if (!auth) return unauthorized();
-    if (!isAdminRole(auth.role)) {
-      return Response.json({ ok: false, error: "forbidden" }, { status: 403 });
-    }
 
     const { tripId } = await ctx.params;
     if (!isValidObjectId(tripId)) {
@@ -98,6 +60,9 @@ export async function POST(req: Request, ctx: Ctx) {
     if (!isValidObjectId(driverUserId)) {
       return Response.json({ ok: false, error: "invalid_driver" }, { status: 400 });
     }
+    if (auth.id !== driverUserId) {
+      return Response.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
 
     const created = await TripChatMessage.create({
       tripId,
@@ -113,12 +78,10 @@ export async function POST(req: Request, ctx: Ctx) {
     return Response.json({ ok: true, item: payload });
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown_error";
-    console.error("[trips/chat/messages] failed:", err);
+    console.error("[trips/chat/reply] failed:", err);
     return Response.json(
-      { ok: false, error: "failed_to_create_trip_chat_message", message },
+      { ok: false, error: "failed_to_create_trip_chat_reply", message },
       { status: 500 },
     );
   }
 }
-
-

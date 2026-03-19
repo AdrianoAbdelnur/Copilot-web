@@ -22,6 +22,8 @@ Payload:
   "id": "msg_123",
   "tripId": "trip_456",
   "text": "Mensaje del despacho",
+  "senderUserId": "user_789",
+  "senderType": "dispatcher",
   "createdAt": "2026-03-18T12:00:00.000Z"
 }
 ```
