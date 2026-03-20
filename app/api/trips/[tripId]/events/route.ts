@@ -1,6 +1,7 @@
-import { connectDB } from "@/lib/db";
+﻿import { connectDB } from "@/lib/db";
 import Trip from "@/models/Trip";
 import TripEvent, { tripEventTypes } from "@/models/TripEvent";
+import { getTenantContext } from "@/lib/tenant";
 import {
   CLOSED_STATUSES,
   findOwnedTrip,
@@ -30,8 +31,13 @@ export async function POST(req: Request, ctx: Ctx) {
     if (!isValidObjectId(tripId)) return invalidId();
 
     await connectDB();
+    const tenantContext = await getTenantContext(req);
+    if (!tenantContext.ok) {
+      return Response.json({ ok: false, error: tenantContext.error, message: tenantContext.message }, { status: tenantContext.status });
+    }
+    const tenantId = tenantContext.tenantId;
 
-    const trip = await findOwnedTrip(tripId, userId);
+    const trip = await findOwnedTrip(tripId, userId, tenantId);
     if (!trip) {
       return Response.json({ ok: false, error: "trip_not_found" }, { status: 404 });
     }
@@ -48,6 +54,7 @@ export async function POST(req: Request, ctx: Ctx) {
 
     const now = new Date();
     const docs = events.map((event: any) => ({
+      companyId: (trip as { companyId?: unknown }).companyId ?? tenantId ?? null,
       tripId: trip._id,
       userId,
       routeId: trip.routeId,
@@ -116,8 +123,18 @@ export async function GET(req: Request, ctx: Ctx) {
     if (!isValidObjectId(tripId)) return invalidId();
 
     await connectDB();
+    const tenantContext = await getTenantContext(req);
+    if (!tenantContext.ok) {
+      return Response.json({ ok: false, error: tenantContext.error, message: tenantContext.message }, { status: tenantContext.status });
+    }
+    const tenantId = tenantContext.tenantId;
 
-    const trip = await findTripForUserScope(tripId, auth.id, isAdminRole(auth.role));
+    const trip = await findTripForUserScope(
+      tripId,
+      auth.id,
+      isAdminRole(auth.role),
+      tenantId,
+    );
     if (!trip) {
       return Response.json({ ok: false, error: "trip_not_found" }, { status: 404 });
     }
@@ -133,7 +150,11 @@ export async function GET(req: Request, ctx: Ctx) {
       return Response.json({ ok: false, error: "invalid_date" }, { status: 400 });
     }
 
-    const query: Record<string, any> = { tripId: trip._id, userId: trip.userId };
+    const query: Record<string, any> = {
+      tripId: trip._id,
+      userId: trip.userId,
+      companyId: (trip as { companyId?: unknown }).companyId ?? tenantId ?? null,
+    };
     if (from || to) {
       query.t = {};
       if (from) query.t.$gte = from;
@@ -147,3 +168,5 @@ export async function GET(req: Request, ctx: Ctx) {
     return Response.json({ ok: false, error: "failed_to_list_trip_events" }, { status: 500 });
   }
 }
+
+

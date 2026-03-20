@@ -1,5 +1,6 @@
-import { connectDB } from "@/lib/db";
+﻿import { connectDB } from "@/lib/db";
 import { emitDriverChatMessage } from "@/lib/realtime/socketDispatch";
+import { getTenantContext } from "@/lib/tenant";
 import Trip from "@/models/Trip";
 import TripChatMessage from "@/models/TripChatMessage";
 import {
@@ -50,8 +51,15 @@ export async function POST(req: Request, ctx: Ctx) {
     }
 
     await connectDB();
+    const tenantContext = await getTenantContext(req);
+    if (!tenantContext.ok) {
+      return Response.json({ ok: false, error: tenantContext.error, message: tenantContext.message }, { status: tenantContext.status });
+    }
+    const tenantId = tenantContext.tenantId;
 
-    const trip = await Trip.findById(tripId).select("userId").lean();
+    const trip = tenantId
+      ? await Trip.findOne({ _id: tripId, companyId: tenantId }).select("userId companyId").lean()
+      : await Trip.findById(tripId).select("userId companyId").lean();
     if (!trip) {
       return Response.json({ ok: false, error: "trip_not_found" }, { status: 404 });
     }
@@ -65,6 +73,7 @@ export async function POST(req: Request, ctx: Ctx) {
     }
 
     const created = await TripChatMessage.create({
+      companyId: (trip as { companyId?: unknown }).companyId ?? tenantId ?? null,
       tripId,
       driverUserId,
       senderUserId: auth.id,
@@ -85,3 +94,5 @@ export async function POST(req: Request, ctx: Ctx) {
     );
   }
 }
+
+

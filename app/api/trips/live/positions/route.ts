@@ -1,4 +1,5 @@
-import { connectDB } from "@/lib/db";
+﻿import { connectDB } from "@/lib/db";
+import { getTenantContext } from "@/lib/tenant";
 import TripPlan from "@/models/TripPlan";
 import Trip from "@/models/Trip";
 import User from "@/models/User";
@@ -45,6 +46,11 @@ export async function GET(req: Request) {
     if (!auth) return unauthorized();
 
     await connectDB();
+    const tenantContext = await getTenantContext(req);
+    if (!tenantContext.ok) {
+      return Response.json({ ok: false, error: tenantContext.error, message: tenantContext.message }, { status: tenantContext.status });
+    }
+    const tenantId = tenantContext.tenantId;
 
     const url = new URL(req.url);
     const status = (url.searchParams.get("status") || "active").trim();
@@ -55,11 +61,15 @@ export async function GET(req: Request) {
     const limit = parseLimit(url.searchParams.get("limit"), 400, 2000);
 
     const adminMode = isAdminRole(auth.role);
-    const tripQuery: Record<string, any> = {};
-    const usersQuery: Record<string, any> = {
+    const tripQuery: Record<string, unknown> = {};
+    const usersQuery: Record<string, unknown> = {
       isDeleted: false,
       role: "driver",
     };
+    if (tenantId) {
+      tripQuery.companyId = tenantId;
+      usersQuery.memberships = { $elemMatch: { companyId: tenantId, status: "active" } };
+    }
 
     if (!adminMode) {
       tripQuery.userId = auth.id;
@@ -127,7 +137,11 @@ export async function GET(req: Request) {
     }
 
     const plans = tripIds.length
-      ? await TripPlan.find({ tripId: { $in: tripIds } })
+      ? await TripPlan.find(
+          tenantId
+            ? { tripId: { $in: tripIds }, companyId: tenantId }
+            : { tripId: { $in: tripIds } },
+        )
           .select("tripId vehicle title")
           .sort({ updatedAt: -1 })
           .lean()
@@ -254,3 +268,5 @@ export async function GET(req: Request) {
     return Response.json({ ok: false, error: "failed_to_list_live_positions", message }, { status: 500 });
   }
 }
+
+

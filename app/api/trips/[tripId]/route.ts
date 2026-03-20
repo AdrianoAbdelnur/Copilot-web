@@ -1,4 +1,5 @@
-import { connectDB } from "@/lib/db";
+﻿import { connectDB } from "@/lib/db";
+import { getTenantContext } from "@/lib/tenant";
 import Trip from "@/models/Trip";
 import TripEvent from "@/models/TripEvent";
 import TripSample from "@/models/TripSample";
@@ -26,8 +27,18 @@ export async function GET(req: Request, ctx: Ctx) {
     if (!isValidObjectId(tripId)) return invalidId();
 
     await connectDB();
+    const tenantContext = await getTenantContext(req);
+    if (!tenantContext.ok) {
+      return Response.json({ ok: false, error: tenantContext.error, message: tenantContext.message }, { status: tenantContext.status });
+    }
+    const tenantId = tenantContext.tenantId;
 
-    const item = await findTripForUserScope(tripId, auth.id, isAdminRole(auth.role));
+    const item = await findTripForUserScope(
+      tripId,
+      auth.id,
+      isAdminRole(auth.role),
+      tenantId,
+    );
     if (item?.populate) {
       await item.populate("userId", "firstName lastName email role");
       await item.populate("routeId", "title google.totals.distanceM");
@@ -55,6 +66,11 @@ export async function PATCH(req: Request, ctx: Ctx) {
     if (!isValidObjectId(tripId)) return invalidId();
 
     await connectDB();
+    const tenantContext = await getTenantContext(req);
+    if (!tenantContext.ok) {
+      return Response.json({ ok: false, error: tenantContext.error, message: tenantContext.message }, { status: tenantContext.status });
+    }
+    const tenantId = tenantContext.tenantId;
 
     const body = await req.json().catch(() => ({}));
     const patch: Record<string, any> = {};
@@ -100,7 +116,11 @@ export async function PATCH(req: Request, ctx: Ctx) {
       patch.endPos = body.endPos;
     }
 
-    const item = await Trip.findByIdAndUpdate(tripId, { $set: patch }, { new: true })
+    const item = await Trip.findOneAndUpdate(
+      tenantId ? { _id: tripId, companyId: tenantId } : { _id: tripId },
+      { $set: patch },
+      { new: true },
+    )
       .populate("userId", "firstName lastName email role")
       .populate("routeId", "title google.totals.distanceM");
     if (!item) return Response.json({ ok: false, error: "trip_not_found" }, { status: 404 });
@@ -123,8 +143,15 @@ export async function DELETE(req: Request, ctx: Ctx) {
     if (!isValidObjectId(tripId)) return invalidId();
 
     await connectDB();
+    const tenantContext = await getTenantContext(req);
+    if (!tenantContext.ok) {
+      return Response.json({ ok: false, error: tenantContext.error, message: tenantContext.message }, { status: tenantContext.status });
+    }
+    const tenantId = tenantContext.tenantId;
 
-    const deleted = await Trip.findByIdAndDelete(tripId);
+    const deleted = await Trip.findOneAndDelete(
+      tenantId ? { _id: tripId, companyId: tenantId } : { _id: tripId },
+    );
     if (!deleted) return Response.json({ ok: false, error: "trip_not_found" }, { status: 404 });
 
     await Promise.all([
@@ -138,3 +165,5 @@ export async function DELETE(req: Request, ctx: Ctx) {
     return Response.json({ ok: false, error: "failed_to_delete_trip" }, { status: 500 });
   }
 }
+
+

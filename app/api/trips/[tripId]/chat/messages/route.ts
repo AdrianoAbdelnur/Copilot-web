@@ -1,5 +1,6 @@
-import { connectDB } from "@/lib/db";
+﻿import { connectDB } from "@/lib/db";
 import { emitDriverChatMessage } from "@/lib/realtime/socketDispatch";
+import { getTenantContext } from "@/lib/tenant";
 import Trip from "@/models/Trip";
 import TripChatMessage from "@/models/TripChatMessage";
 import {
@@ -42,8 +43,15 @@ export async function GET(req: Request, ctx: Ctx) {
     }
 
     await connectDB();
+    const tenantContext = await getTenantContext(req);
+    if (!tenantContext.ok) {
+      return Response.json({ ok: false, error: tenantContext.error, message: tenantContext.message }, { status: tenantContext.status });
+    }
+    const tenantId = tenantContext.tenantId;
 
-    const trip = await Trip.findById(tripId).select("userId").lean();
+    const trip = tenantId
+      ? await Trip.findOne({ _id: tripId, companyId: tenantId }).select("userId companyId").lean()
+      : await Trip.findById(tripId).select("userId companyId").lean();
     if (!trip) {
       return Response.json({ ok: false, error: "trip_not_found" }, { status: 404 });
     }
@@ -58,7 +66,13 @@ export async function GET(req: Request, ctx: Ctx) {
     const limitRaw = Number(url.searchParams.get("limit") || 50);
     const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? Math.floor(limitRaw) : 50, 1), 200);
 
-    const rows = await TripChatMessage.find({ tripId }).sort({ createdAt: -1 }).limit(limit).lean();
+    const rows = await TripChatMessage.find({
+      tripId,
+      companyId: (trip as { companyId?: unknown }).companyId ?? tenantId ?? null,
+    })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
     return Response.json({ ok: true, items: rows.reverse().map((x) => toItem(x)) });
   } catch {
     return Response.json({ ok: false, error: "failed_to_list_trip_chat_messages" }, { status: 500 });
@@ -88,8 +102,15 @@ export async function POST(req: Request, ctx: Ctx) {
     }
 
     await connectDB();
+    const tenantContext = await getTenantContext(req);
+    if (!tenantContext.ok) {
+      return Response.json({ ok: false, error: tenantContext.error, message: tenantContext.message }, { status: tenantContext.status });
+    }
+    const tenantId = tenantContext.tenantId;
 
-    const trip = await Trip.findById(tripId).select("userId").lean();
+    const trip = tenantId
+      ? await Trip.findOne({ _id: tripId, companyId: tenantId }).select("userId companyId").lean()
+      : await Trip.findById(tripId).select("userId companyId").lean();
     if (!trip) {
       return Response.json({ ok: false, error: "trip_not_found" }, { status: 404 });
     }
@@ -100,6 +121,7 @@ export async function POST(req: Request, ctx: Ctx) {
     }
 
     const created = await TripChatMessage.create({
+      companyId: (trip as { companyId?: unknown }).companyId ?? tenantId ?? null,
       tripId,
       driverUserId,
       senderUserId: auth.id,
@@ -120,5 +142,7 @@ export async function POST(req: Request, ctx: Ctx) {
     );
   }
 }
+
+
 
 
