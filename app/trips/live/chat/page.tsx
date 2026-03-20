@@ -1,7 +1,8 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { getAuthHeaders } from "@/lib/clientSession";
 
 type LiveItem = {
   itemId: string;
@@ -22,19 +23,6 @@ type ChatMessageItem = {
   spokenAt: string | null;
   readAt: string | null;
 };
-
-function authHeaders(): HeadersInit {
-  if (typeof window === "undefined") return {};
-  const local = localStorage.getItem("token") || "";
-  const cookieToken =
-    document.cookie
-      .split(";")
-      .map((p) => p.trim())
-      .find((p) => p.startsWith("token="))
-      ?.split("=")[1] || "";
-  const token = local || decodeURIComponent(cookieToken);
-  return token ? { Authorization: token } : {};
-}
 
 export default function LiveTripChatPage() {
   const [items, setItems] = useState<LiveItem[]>([]);
@@ -59,7 +47,7 @@ export default function LiveTripChatPage() {
       setError("");
       setLoading(true);
       const res = await fetch("/api/trips/live/positions?status=active&limit=1000", {
-        headers: authHeaders(),
+        headers: getAuthHeaders(),
         cache: "no-store",
       });
       const json = await res.json().catch(() => ({}));
@@ -97,7 +85,7 @@ export default function LiveTripChatPage() {
       setChatHistoryLoading(true);
       setChatHistoryError("");
       const res = await fetch(`/api/trips/${tripId}/chat/messages?limit=80`, {
-        headers: authHeaders(),
+        headers: getAuthHeaders(),
         cache: "no-store",
       });
       const json = await res.json().catch(() => ({}));
@@ -147,7 +135,7 @@ export default function LiveTripChatPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...authHeaders(),
+          ...getAuthHeaders(),
         },
         body: JSON.stringify({ text: payload }),
       });
@@ -288,3 +276,4 @@ export default function LiveTripChatPage() {
     </div>
   );
 }
+

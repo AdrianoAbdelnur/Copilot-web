@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { getAuthHeaders } from "@/lib/clientSession";
 
 type QuickCard = {
   href: string;
@@ -18,12 +19,13 @@ export default function Home() {
   useEffect(() => {
     let alive = true;
 
-    fetch("/api/users/me", { cache: "no-store" })
+    fetch("/api/users/me", { cache: "no-store", headers: getAuthHeaders() })
       .then((r) => r.json().catch(() => ({})))
       .then((json) => {
         if (!alive) return;
         const role = String(json?.user?.role || "").toLowerCase();
-        setIsAdmin(role === "admin");
+        const tenantRole = String(json?.tenant?.tenantRole || "").toLowerCase();
+        setIsAdmin(role === "admin" || role === "superadmin" || tenantRole === "admin");
       })
       .catch(() => {
         if (!alive) return;

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { setClientSession } from "@/lib/clientSession";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -35,8 +36,10 @@ export default function LoginPage() {
         return;
       }
 
-      localStorage.setItem("token", token);
-      document.cookie = `token=${encodeURIComponent(token)}; Path=/; Max-Age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+      setClientSession({
+        token,
+        user: data?.user ?? null,
+      });
 
       router.push("/");
     } catch {

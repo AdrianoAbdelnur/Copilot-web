@@ -1,8 +1,9 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { loadGoogleMaps } from "@/lib/gmaps/loader";
+import { getAuthHeaders } from "@/lib/clientSession";
 
 type LiveItem = {
   itemId: string;
@@ -31,19 +32,6 @@ type ChatMessageItem = {
   spokenAt: string | null;
   readAt: string | null;
 };
-
-function authHeaders(): HeadersInit {
-  if (typeof window === "undefined") return {};
-  const local = localStorage.getItem("token") || "";
-  const cookieToken =
-    document.cookie
-      .split(";")
-      .map((p) => p.trim())
-      .find((p) => p.startsWith("token="))
-      ?.split("=")[1] || "";
-  const token = local || decodeURIComponent(cookieToken);
-  return token ? { Authorization: token } : {};
-}
 
 function mapStateColor(state: LiveItem["live"]["onlineState"]) {
   if (state === "online") return "#16a34a";
@@ -197,7 +185,7 @@ export default function LiveTripsMapPage() {
       setError("");
       setLoading(true);
       const res = await fetch("/api/trips/live/positions?status=all&limit=1000", {
-        headers: authHeaders(),
+        headers: getAuthHeaders(),
         cache: "no-store",
       });
       const json = await res.json().catch(() => ({}));
@@ -232,7 +220,7 @@ export default function LiveTripsMapPage() {
       setChatHistoryLoading(true);
       setChatHistoryError("");
       const res = await fetch(`/api/trips/${tripId}/chat/messages?limit=80`, {
-        headers: authHeaders(),
+        headers: getAuthHeaders(),
         cache: "no-store",
       });
       const json = await res.json().catch(() => ({}));
@@ -275,7 +263,7 @@ export default function LiveTripsMapPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...authHeaders(),
+          ...getAuthHeaders(),
         },
         body: JSON.stringify({ text: payload }),
       });
@@ -698,3 +686,4 @@ export default function LiveTripsMapPage() {
     </div>
   );
 }
+

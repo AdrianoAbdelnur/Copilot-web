@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { getAuthHeaders } from "@/lib/clientSession";
 
 type UserItem = {
   _id: string;
@@ -49,12 +50,6 @@ type TripItem = {
   } | null;
   totals?: Record<string, number>;
 };
-
-function authHeaders(): HeadersInit {
-  if (typeof window === "undefined") return {};
-  const token = localStorage.getItem("token") || "";
-  return token ? { Authorization: token } : {};
-}
 
 function displayName(user: UserItem) {
   const full = `${user.firstName || ""} ${user.lastName || ""}`.trim();
@@ -221,9 +216,9 @@ export default function TripsPage() {
       const [usersRes, routesRes, plansRes, liveRes, meRes] = await Promise.all([
         fetch("/api/users?paginated=false"),
         fetch("/api/routes"),
-        fetch("/api/trip-plans?limit=200", { headers: authHeaders() }),
-        fetch("/api/trips/live?limit=200", { headers: authHeaders() }),
-        fetch("/api/users/me", { headers: authHeaders() }),
+        fetch("/api/trip-plans?limit=200", { headers: getAuthHeaders() }),
+        fetch("/api/trips/live?limit=200", { headers: getAuthHeaders() }),
+        fetch("/api/users/me", { headers: getAuthHeaders() }),
       ]);
 
       const usersJson = await usersRes.json().catch(() => ({}));
@@ -265,7 +260,7 @@ export default function TripsPage() {
 
     const res = await fetch("/api/trip-plans", {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify({
         driverUserIds: formDriverIds,
         routeId: formRouteId,
@@ -293,7 +288,7 @@ export default function TripsPage() {
   const patchPlanStatus = async (planId: string, status: TripPlanItem["status"]) => {
     const res = await fetch(`/api/trip-plans/${planId}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify({ status }),
     });
     const json = await res.json().catch(() => ({}));
@@ -320,7 +315,7 @@ export default function TripsPage() {
     try {
       const res = await fetch(`/api/trips/${editTripId}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({
           title: editTripTitle,
           notes: editTripNotes,
@@ -363,7 +358,7 @@ export default function TripsPage() {
 
       const res = await fetch(`/api/trips/${trip._id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify(patch),
       });
       const json = await res.json().catch(() => ({}));
@@ -388,7 +383,7 @@ export default function TripsPage() {
     try {
       const res = await fetch(`/api/trips/${trip._id}`, {
         method: "DELETE",
-        headers: authHeaders(),
+        headers: getAuthHeaders(),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json?.ok) {
@@ -412,9 +407,9 @@ export default function TripsPage() {
     setSelectedPlanId("");
     setSelectedTripId(tripId);
     const [tripRes, eventsRes, samplesRes] = await Promise.all([
-      fetch(`/api/trips/${tripId}`, { headers: authHeaders() }),
-      fetch(`/api/trips/${tripId}/events?limit=200`, { headers: authHeaders() }),
-      fetch(`/api/trips/${tripId}/samples?limit=200`, { headers: authHeaders() }),
+      fetch(`/api/trips/${tripId}`, { headers: getAuthHeaders() }),
+      fetch(`/api/trips/${tripId}/events?limit=200`, { headers: getAuthHeaders() }),
+      fetch(`/api/trips/${tripId}/samples?limit=200`, { headers: getAuthHeaders() }),
     ]);
 
     const tripJson = await tripRes.json().catch(() => ({}));
@@ -432,7 +427,7 @@ export default function TripsPage() {
 
   useEffect(() => {
     const id = setInterval(() => {
-      fetch("/api/trips/live?limit=200", { headers: authHeaders() })
+      fetch("/api/trips/live?limit=200", { headers: getAuthHeaders() })
         .then((r) => r.json())
         .then((j) => setLiveTrips(j?.items || []))
         .catch(() => null);
@@ -472,7 +467,7 @@ export default function TripsPage() {
     (async () => {
       for (const trip of candidates) {
         try {
-          const res = await fetch(`/api/trips/${trip._id}/samples?limit=5000`, { headers: authHeaders() });
+          const res = await fetch(`/api/trips/${trip._id}/samples?limit=5000`, { headers: getAuthHeaders() });
           const json = await res.json().catch(() => ({}));
           const items = Array.isArray(json?.items) ? json.items : [];
           const distanceM = realDistanceFromSamples(items);
@@ -1122,3 +1117,4 @@ function MiniAction({ children, onClick }: { children: React.ReactNode; onClick:
     </button>
   );
 }
+
