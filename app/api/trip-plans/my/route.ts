@@ -1,6 +1,7 @@
 import { connectDB } from "@/lib/db";
 import TripPlan from "@/models/TripPlan";
 import { getAuthPayload } from "@/lib/auth";
+import { getTenantContext } from "@/lib/tenant";
 import mongoose from "mongoose";
 
 export const runtime = "nodejs";
@@ -45,6 +46,14 @@ export async function GET(req: Request) {
     await connectDB();
     console.log(`[${debugId}] db connected`);
 
+    const tenantContext = await getTenantContext(req);
+    if (!tenantContext.ok) {
+      return Response.json(
+        { ok: false, error: tenantContext.error, message: tenantContext.message },
+        { status: tenantContext.status },
+      );
+    }
+
     const url = new URL(req.url);
     const statusRaw = (url.searchParams.get("status") || "").trim();
     const fromRaw = url.searchParams.get("from");
@@ -72,6 +81,8 @@ export async function GET(req: Request) {
       status: { $in: statuses },
     };
 
+    query.companyId = tenantContext.tenantId;
+
     if (from || to) {
       query.plannedStartAt = {};
       if (from) query.plannedStartAt.$gte = from;
@@ -97,7 +108,13 @@ export async function GET(req: Request) {
 
     console.log(`[${debugId}] success`, { count: Array.isArray(items) ? items.length : 0 });
 
-    return Response.json({ ok: true, items, mine: true, statuses });
+    return Response.json({
+      ok: true,
+      items,
+      mine: true,
+      statuses,
+      tenant: { resolved: true, tenantId: tenantContext.tenantId, source: tenantContext.source },
+    });
   } catch (err: unknown) {
     const castErr = err as { name?: string; message?: string; path?: string; value?: unknown };
     console.error(`[${debugId}] failed_to_list_my_trip_plans`, {

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import TripPlaybackMap from "../TripPlaybackMap";
+import { getAuthHeaders } from "@/lib/clientSession";
 
 type LatLng = { latitude: number; longitude: number };
 
@@ -29,14 +30,6 @@ function normalizeObjectId(value: unknown): string {
     return typeof maybeId === "string" ? maybeId : "";
   }
   return "";
-}
-
-function authHeaders(): HeadersInit {
-  if (typeof window === "undefined") return {};
-  const local = localStorage.getItem("token") || "";
-  const cookieToken = document.cookie.split(";").map((p) => p.trim()).find((p) => p.startsWith("token="))?.split("=")[1] || "";
-  const token = local || decodeURIComponent(cookieToken);
-  return token ? { Authorization: token } : {};
 }
 
 function eventTypeLabel(type?: string) {
@@ -80,9 +73,9 @@ export default function TripDetailPage() {
     setError("");
     try {
       const [tripRes, eventsRes, samplesRes] = await Promise.all([
-        fetch(`/api/trips/${tripId}`, { headers: authHeaders() }),
-        fetch(`/api/trips/${tripId}/events?limit=2000`, { headers: authHeaders() }),
-        fetch(`/api/trips/${tripId}/samples?limit=5000`, { headers: authHeaders() }),
+        fetch(`/api/trips/${tripId}`, { headers: getAuthHeaders() }),
+        fetch(`/api/trips/${tripId}/events?limit=2000`, { headers: getAuthHeaders() }),
+        fetch(`/api/trips/${tripId}/samples?limit=5000`, { headers: getAuthHeaders() }),
       ]);
 
       const tripJson = await tripRes.json().catch(() => ({}));
@@ -101,7 +94,7 @@ export default function TripDetailPage() {
 
       const routeId = normalizeObjectId(item?.routeId);
       if (routeId) {
-        const routeRes = await fetch(`/api/routes/${routeId}`);
+        const routeRes = await fetch(`/api/routes/${routeId}`, { headers: getAuthHeaders() });
         const routeJson = await routeRes.json().catch(() => ({}));
         console.log("routeJson", routeJson);
         setRouteDoc(routeJson?.route ?? null);
@@ -269,3 +262,4 @@ export default function TripDetailPage() {
     </div>
   );
 }
+

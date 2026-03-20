@@ -1,5 +1,6 @@
-import { connectDB } from "@/lib/db";
+﻿import { connectDB } from "@/lib/db";
 import Trip from "@/models/Trip";
+import { getTenantContext } from "@/lib/tenant";
 import {
   ALLOWED_STATUS_PATCH,
   CLOSED_STATUSES,
@@ -23,8 +24,13 @@ export async function PATCH(req: Request, ctx: Ctx) {
     if (!isValidObjectId(tripId)) return invalidId();
 
     await connectDB();
+    const tenantContext = await getTenantContext(req);
+    if (!tenantContext.ok) {
+      return Response.json({ ok: false, error: tenantContext.error, message: tenantContext.message }, { status: tenantContext.status });
+    }
+    const tenantId = tenantContext.tenantId;
 
-    const trip = await findOwnedTrip(tripId, userId);
+    const trip = await findOwnedTrip(tripId, userId, tenantId);
     if (!trip) {
       return Response.json({ ok: false, error: "trip_not_found" }, { status: 404 });
     }
@@ -46,3 +52,5 @@ export async function PATCH(req: Request, ctx: Ctx) {
     return Response.json({ ok: false, error: "failed_to_update_trip_status" }, { status: 500 });
   }
 }
+
+

@@ -1,4 +1,5 @@
-import { connectDB } from "@/lib/db";
+﻿import { connectDB } from "@/lib/db";
+import { getTenantContext } from "@/lib/tenant";
 import Trip from "@/models/Trip";
 import TripEvent from "@/models/TripEvent";
 import {
@@ -25,8 +26,13 @@ export async function POST(req: Request, ctx: Ctx) {
     if (!isValidObjectId(tripId)) return invalidId();
 
     await connectDB();
+    const tenantContext = await getTenantContext(req);
+    if (!tenantContext.ok) {
+      return Response.json({ ok: false, error: tenantContext.error, message: tenantContext.message }, { status: tenantContext.status });
+    }
+    const tenantId = tenantContext.tenantId;
 
-    const trip = await findOwnedTrip(tripId, userId);
+    const trip = await findOwnedTrip(tripId, userId, tenantId);
     if (!trip) {
       return Response.json({ ok: false, error: "trip_not_found" }, { status: 404 });
     }
@@ -45,6 +51,7 @@ export async function POST(req: Request, ctx: Ctx) {
     const endedAt = new Date();
 
     await TripEvent.create({
+      companyId: (trip as { companyId?: unknown }).companyId ?? tenantId ?? null,
       tripId: trip._id,
       userId,
       routeId: trip.routeId,
@@ -81,3 +88,5 @@ export async function POST(req: Request, ctx: Ctx) {
     return Response.json({ ok: false, error: "failed_to_finish_trip" }, { status: 500 });
   }
 }
+
+

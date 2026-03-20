@@ -47,6 +47,7 @@ const LiveSnapshotSchema = new Schema(
 
 const TripSchema = new Schema(
   {
+    companyId: { type: Schema.Types.ObjectId, ref: "Company", index: true, default: null },
     title: { type: String, default: "" },
     notes: { type: String, default: "" },
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
@@ -70,6 +71,7 @@ const TripSchema = new Schema(
 
 TripSchema.index({ userId: 1, startedAt: -1 });
 TripSchema.index({ routeId: 1, startedAt: -1 });
+TripSchema.index({ companyId: 1, userId: 1, startedAt: -1 });
 
 export type TripDoc = mongoose.InferSchemaType<typeof TripSchema>;
 

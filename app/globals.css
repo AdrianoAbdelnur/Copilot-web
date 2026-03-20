@@ -10,6 +10,11 @@
   --warning: #d97706;
   --danger: #be123c;
   --info: #0369a1;
+  --tenant-primary: #0369a1;
+  --tenant-secondary: #0f172a;
+  --tenant-accent: #14b8a6;
+  --tenant-bg: #f1f5f9;
+  --tenant-text: #0f172a;
 }
 
 :root[data-theme="dark"] {

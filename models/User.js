@@ -12,6 +12,26 @@ const LastKnownLocationSchema = new Schema(
     { _id: false }
 );
 
+const MembershipSchema = new Schema(
+    {
+        companyId: {
+            type: Schema.Types.ObjectId,
+            ref: "Company",
+            required: true
+        },
+        tenantRole: {
+            type: String,
+            default: "member"
+        },
+        status: {
+            type: String,
+            enum: ["active", "inactive"],
+            default: "active"
+        }
+    },
+    { _id: false }
+);
+
 const UserSchema = new Schema(
     {
         firstName: {
@@ -57,6 +77,16 @@ const UserSchema = new Schema(
             type: Boolean,
             default: false
         },
+        defaultCompanyId: {
+            type: Schema.Types.ObjectId,
+            ref: "Company",
+            index: true,
+            default: null
+        },
+        memberships: {
+            type: [MembershipSchema],
+            default: []
+        },
         lastKnownLocation: {
             type: LastKnownLocationSchema,
             default: undefined
@@ -64,5 +94,7 @@ const UserSchema = new Schema(
     },
     { timestamps: true }
 );
+
+UserSchema.index({ "memberships.companyId": 1 });
 
 module.exports = models.User || model("User", UserSchema);

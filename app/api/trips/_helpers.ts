@@ -70,11 +70,29 @@ export function parseLimit(input: unknown, fallback = 100, max = 1000): number {
   return Math.min(Math.floor(n), max);
 }
 
-export async function findOwnedTrip(tripId: string, userId: string) {
-  return Trip.findOne({ _id: tripId, userId });
+export async function findOwnedTrip(
+  tripId: string,
+  userId: string,
+  tenantId?: string,
+) {
+  const query: Record<string, unknown> = { _id: tripId, userId };
+  if (tenantId) query.companyId = tenantId;
+  return Trip.findOne(query);
 }
 
-export async function findTripForUserScope(tripId: string, authUserId: string, adminMode = false) {
-  if (adminMode) return Trip.findById(tripId);
-  return Trip.findOne({ _id: tripId, userId: authUserId });
+export async function findTripForUserScope(
+  tripId: string,
+  authUserId: string,
+  adminMode = false,
+  tenantId?: string,
+) {
+  if (adminMode) {
+    const adminQuery: Record<string, unknown> = { _id: tripId };
+    if (tenantId) adminQuery.companyId = tenantId;
+    return Trip.findOne(adminQuery);
+  }
+
+  const userQuery: Record<string, unknown> = { _id: tripId, userId: authUserId };
+  if (tenantId) userQuery.companyId = tenantId;
+  return Trip.findOne(userQuery);
 }

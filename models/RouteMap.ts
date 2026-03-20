@@ -31,6 +31,7 @@ const PointSchema = new Schema(
 
 const RouteSchema = new Schema(
   {
+    companyId: { type: Schema.Types.ObjectId, ref: "Company", index: true, default: null },
     title: { type: String, required: true, trim: true, maxlength: 120 },
     kml: { type: String, default: null },
 
@@ -83,6 +84,8 @@ nav: {
   },
   { timestamps: true }
 );
+
+RouteSchema.index({ companyId: 1, createdAt: -1 });
 
 export type RouteDoc = mongoose.InferSchemaType<typeof RouteSchema>;
 

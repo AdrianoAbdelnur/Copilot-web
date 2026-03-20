@@ -4,6 +4,7 @@ export const tripChatStatuses = ["sent", "delivered", "spoken", "read"] as const
 
 const TripChatMessageSchema = new Schema(
   {
+    companyId: { type: Schema.Types.ObjectId, ref: "Company", index: true, default: null },
     tripId: { type: Schema.Types.ObjectId, ref: "Trip", required: true, index: true },
     driverUserId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     senderUserId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
@@ -18,6 +19,7 @@ const TripChatMessageSchema = new Schema(
 
 TripChatMessageSchema.index({ tripId: 1, createdAt: -1 });
 TripChatMessageSchema.index({ driverUserId: 1, createdAt: -1 });
+TripChatMessageSchema.index({ companyId: 1, tripId: 1, createdAt: -1 });
 
 export type TripChatMessageDoc = mongoose.InferSchemaType<typeof TripChatMessageSchema>;
 

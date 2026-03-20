@@ -70,6 +70,7 @@ const SpeedSchema = new Schema(
 
 const TripEventSchema = new Schema(
   {
+    companyId: { type: Schema.Types.ObjectId, ref: "Company", index: true, default: null },
     tripId: { type: Schema.Types.ObjectId, ref: "Trip", required: true, index: true },
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     routeId: { type: Schema.Types.ObjectId, ref: "Route", required: true, index: true },
@@ -88,6 +89,7 @@ const TripEventSchema = new Schema(
 
 TripEventSchema.index({ tripId: 1, t: 1 });
 TripEventSchema.index({ userId: 1, t: -1 });
+TripEventSchema.index({ companyId: 1, tripId: 1, t: 1 });
 
 export type TripEventDoc = mongoose.InferSchemaType<typeof TripEventSchema>;
 

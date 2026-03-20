@@ -1,4 +1,5 @@
-import { connectDB } from "@/lib/db";
+﻿import { connectDB } from "@/lib/db";
+import { getTenantContext } from "@/lib/tenant";
 import Trip from "@/models/Trip";
 import {
   getAuthUser,
@@ -16,6 +17,11 @@ export async function GET(req: Request) {
     if (!auth) return unauthorized();
 
     await connectDB();
+    const tenantContext = await getTenantContext(req);
+    if (!tenantContext.ok) {
+      return Response.json({ ok: false, error: tenantContext.error, message: tenantContext.message }, { status: tenantContext.status });
+    }
+    const tenantId = tenantContext.tenantId;
 
     const url = new URL(req.url);
     const status = (url.searchParams.get("status") || "").trim();
@@ -27,6 +33,7 @@ export async function GET(req: Request) {
 
     const adminMode = isAdminRole(auth.role) && scope === "all";
     const query: Record<string, any> = adminMode ? {} : { userId: auth.id };
+    if (tenantId) query.companyId = tenantId;
 
     if (adminMode && userId) query.userId = userId;
 
@@ -44,3 +51,5 @@ export async function GET(req: Request) {
     return Response.json({ ok: false, error: "failed_to_list_trips" }, { status: 500 });
   }
 }
+
+

@@ -1,7 +1,8 @@
-import { connectDB } from "@/lib/db";
+﻿import { connectDB } from "@/lib/db";
 import Trip from "@/models/Trip";
 import TripEvent from "@/models/TripEvent";
 import { getUserIdOrNull, isValidObjectId, isValidPos, unauthorized } from "../_helpers";
+import { getTenantContext } from "@/lib/tenant";
 
 export const runtime = "nodejs";
 
@@ -11,6 +12,11 @@ export async function POST(req: Request) {
     if (!userId) return unauthorized();
 
     await connectDB();
+    const tenantContext = await getTenantContext(req);
+    if (!tenantContext.ok) {
+      return Response.json({ ok: false, error: tenantContext.error, message: tenantContext.message }, { status: tenantContext.status });
+    }
+    const companyId = tenantContext.tenantId;
 
     const body = await req.json();
     const routeId = String(body?.routeId ?? "");
@@ -27,6 +33,7 @@ export async function POST(req: Request) {
     const startedAt = new Date();
 
     const trip = await Trip.create({
+      companyId,
       userId,
       routeId,
       status: "active",
@@ -40,6 +47,7 @@ export async function POST(req: Request) {
     });
 
     await TripEvent.create({
+      companyId,
       tripId: trip._id,
       userId,
       routeId,
@@ -55,3 +63,5 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, error: "failed_to_start_trip" }, { status: 500 });
   }
 }
+
+

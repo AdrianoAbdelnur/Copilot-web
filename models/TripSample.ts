@@ -19,6 +19,7 @@ const MatchSchema = new Schema(
 
 const TripSampleSchema = new Schema(
   {
+    companyId: { type: Schema.Types.ObjectId, ref: "Company", index: true, default: null },
     tripId: { type: Schema.Types.ObjectId, ref: "Trip", required: true, index: true },
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     routeId: { type: Schema.Types.ObjectId, ref: "Route", required: true, index: true },
@@ -33,6 +34,7 @@ const TripSampleSchema = new Schema(
 );
 
 TripSampleSchema.index({ tripId: 1, t: 1 });
+TripSampleSchema.index({ companyId: 1, tripId: 1, t: 1 });
 
 export type TripSampleDoc = mongoose.InferSchemaType<typeof TripSampleSchema>;
 
