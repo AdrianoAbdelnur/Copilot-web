@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "mt:backfill:dry": "node scripts/multitenant-backfill.mjs",
+    "mt:backfill:apply": "node scripts/multitenant-backfill.mjs --apply"
   },
   "dependencies": {
     "@react-google-maps/api": "^2.20.8",

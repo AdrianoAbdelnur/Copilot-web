@@ -11,6 +11,7 @@ const VehicleSchema = new Schema(
 
 const TripPlanSchema = new Schema(
   {
+    companyId: { type: Schema.Types.ObjectId, ref: "Company", index: true, default: null },
     driverUserId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     routeId: { type: Schema.Types.ObjectId, ref: "Route", required: true, index: true },
     plannedStartAt: { type: Date, required: true, index: true },
@@ -34,6 +35,7 @@ const TripPlanSchema = new Schema(
 
 TripPlanSchema.index({ driverUserId: 1, plannedStartAt: -1 });
 TripPlanSchema.index({ status: 1, plannedStartAt: 1 });
+TripPlanSchema.index({ companyId: 1, driverUserId: 1, plannedStartAt: -1 });
 
 export type TripPlanDoc = mongoose.InferSchemaType<typeof TripPlanSchema>;
 
