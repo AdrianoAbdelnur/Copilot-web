@@ -33,6 +33,8 @@ type ChatMessageItem = {
   readAt: string | null;
 };
 
+const POSSIBLE_LOST_MS = 3 * 60_000;
+
 function mapStateColor(state: LiveItem["live"]["onlineState"]) {
   if (state === "online") return "#16a34a";
   if (state === "stale") return "#d97706";
@@ -77,6 +79,37 @@ function formatDateTime(iso: string | null): string {
 
 function messageOriginLabel(message: ChatMessageItem): string {
   return message.senderType === "driver" ? "Chofer" : "Despacho";
+}
+
+function messageStatusLabel(status: ChatMessageItem["status"]): string {
+  if (status === "sent") return "enviado";
+  if (status === "delivered") return "entregado";
+  if (status === "spoken") return "reproducido";
+  if (status === "read") return "leido";
+  return status || "desconocido";
+}
+
+function messageStatusTone(status: ChatMessageItem["status"]): string {
+  if (status === "read") return "border-emerald-200 bg-emerald-100 text-emerald-800";
+  if (status === "spoken") return "border-blue-200 bg-blue-100 text-blue-800";
+  if (status === "delivered") return "border-amber-200 bg-amber-100 text-amber-800";
+  if (status === "sent") return "border-slate-200 bg-slate-100 text-slate-700";
+  return "border-slate-200 bg-slate-100 text-slate-700";
+}
+
+function messageStatusTimestamp(message: ChatMessageItem): string | null {
+  if (message.status === "read") return message.readAt || message.spokenAt || message.deliveredAt || message.createdAt;
+  if (message.status === "spoken") return message.spokenAt || message.deliveredAt || message.createdAt;
+  if (message.status === "delivered") return message.deliveredAt || message.createdAt;
+  return message.createdAt;
+}
+
+function isPossibleLostMessage(message: ChatMessageItem): boolean {
+  if (message.senderType === "driver") return false;
+  if (message.status !== "sent") return false;
+  const createdAtMs = Date.parse(message.createdAt || "");
+  if (!Number.isFinite(createdAtMs)) return false;
+  return Date.now() - createdAtMs >= POSSIBLE_LOST_MS;
 }
 
 
@@ -628,6 +661,8 @@ export default function LiveTripsMapPage() {
                   ) : null}
                   {sortedChatHistory.map((msg) => {
                     const isDriver = msg.senderType === "driver";
+                    const statusAt = messageStatusTimestamp(msg);
+                    const possibleLost = isPossibleLostMessage(msg);
                     return (
                       <div key={msg.id} className={`flex ${isDriver ? "justify-start" : "justify-end"}`}>
                         <div
@@ -641,8 +676,29 @@ export default function LiveTripsMapPage() {
                             {messageOriginLabel(msg)}
                           </div>
                           <div className="text-sm leading-snug">{msg.text}</div>
-                          <div className="mt-1 text-[11px] opacity-70">
-                            {formatDateTime(msg.createdAt)}
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
+                            <span
+                              className={`inline-flex items-center rounded-full border px-2 py-0.5 font-semibold ${messageStatusTone(msg.status)}`}
+                              title={statusAt ? `Actualizado ${formatDateTime(statusAt)}` : "Sin timestamp"}
+                            >
+                              {messageStatusLabel(msg.status)}
+                            </span>
+                            {possibleLost ? (
+                              <span
+                                className="inline-flex items-center rounded-full border border-rose-200 bg-rose-100 px-2 py-0.5 font-semibold text-rose-800"
+                                title="Sigue en enviado sin acuse del dispositivo"
+                              >
+                                posible perdido
+                              </span>
+                            ) : null}
+                            <span className="opacity-70">
+                              {formatDateTime(msg.createdAt)}
+                            </span>
+                            {statusAt ? (
+                              <span className="opacity-70">
+                                · {relativeTime(statusAt)}
+                              </span>
+                            ) : null}
                           </div>
                         </div>
                       </div>
