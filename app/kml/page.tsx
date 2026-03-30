@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { getAuthHeaders } from "@/lib/clientSession";
 
 export default function KmlPage() {
   const [title, setTitle] = useState("");
@@ -81,7 +82,7 @@ export default function KmlPage() {
     try {
       const res = await fetch("/api/routes", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ title, kml: kmlText }),
       });
       const json = await res.json();

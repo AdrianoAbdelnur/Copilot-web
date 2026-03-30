@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { getAuthHeaders } from "@/lib/clientSession";
 import { loadGoogleMaps } from "@/lib/gmaps/loader";
 import { makeDotMarker, setMarkerOff } from "@/lib/gmaps/markers";
 import { normalizeDensePath } from "@/lib/gmaps/route";
@@ -292,7 +293,7 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
         });
 
         setStatus(t.loadingRoute);
-        const res = await fetch(`/api/routes/${routeId}`);
+        const res = await fetch(`/api/routes/${routeId}`, { headers: getAuthHeaders() });
         if (!res.ok) throw new Error(t.routeFetchError);
         const data = await res.json();
 
@@ -536,7 +537,7 @@ export default function RouteEditorMap({ routeId }: { routeId: string }) {
       setStatus(t.saving);
       const res = await fetch(`/api/routes/${routeId}/policy`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ pois, segments }),
       });
       const j = await res.json();

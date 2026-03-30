@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
+import { getAuthHeaders } from "@/lib/clientSession";
 import { esText } from "@/lib/i18n/es";
 
 type RouteListItem = {
@@ -33,7 +34,10 @@ function RoutesPageContent() {
   const loadList = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/routes", { cache: "no-store" });
+      const res = await fetch("/api/routes", {
+        cache: "no-store",
+        headers: getAuthHeaders(),
+      });
       const json = await res.json().catch(() => null);
       const list = Array.isArray(json?.items) ? (json.items as RouteListItem[]) : [];
       setItems(list);
