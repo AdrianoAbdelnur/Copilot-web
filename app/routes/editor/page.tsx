@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { getAuthHeaders } from "@/lib/clientSession";
 import { esText } from "@/lib/i18n/es";
 import type { RepairDebug } from "../RouteMapViewer";
 
@@ -83,7 +84,7 @@ function RoutesPageContent() {
   const routeIdFromQuery = (searchParams.get("routeId") || "").trim();
 
   const loadList = async () => {
-    const res = await fetch("/api/routes");
+    const res = await fetch("/api/routes", { headers: getAuthHeaders() });
     const json = await res.json();
     setItems(json?.items ?? []);
   };
@@ -111,11 +112,17 @@ function RoutesPageContent() {
     setSelected(null);
     resetPanels();
     try {
-      const res = await fetch(`/api/routes/${id}`);
+      const res = await fetch(`/api/routes/${id}`, { headers: getAuthHeaders() });
       const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) {
+        setValidateMsg(json?.message ? `Error: ${json.message}` : "No se pudo abrir la ruta seleccionada");
+        setSelected(null);
+        return;
+      }
       const next = json?.route ?? null;
       setSelected(next);
       setMatchReport(next?.google?.matchReport ?? null);
+      setValidateMsg("");
     } finally {
       setLoadingSelected(false);
     }
@@ -648,7 +655,7 @@ function RoutesPageContent() {
     const nextTitle = `${String(selected?.title ?? "Ruta")} (copia)`;
     const res = await fetch("/api/routes", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ title: nextTitle, kml: selected?.kml ?? "" }),
     });
     const json = await res.json().catch(() => null);

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { getAuthHeaders } from "@/lib/clientSession";
 import { loadGoogleMaps } from "@/lib/gmaps/loader";
 import RouteBuilderSidebar from "./RouteBuilderSidebar";
 import MapUndoOverlay from "./components/MapUndoOverlay";
@@ -1062,7 +1063,7 @@ export default function RouteBuilderMap() {
 
       const res = await fetch("/api/routes", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ title, route, googleDraft }),
       });
       const json = await res.json().catch(() => ({}));

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Card, CardContent } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { getAuthHeaders } from "@/lib/clientSession";
 import { esText } from "@/lib/i18n/es";
 
 const RouteEditorMap = dynamic(() => import("@/components/map/RouteEditorMap"), {
@@ -47,7 +48,7 @@ export default function MarksClient() {
     setLoadingList(true);
     setLoadError("");
 
-    fetch("/api/routes", { cache: "no-store" })
+    fetch("/api/routes", { cache: "no-store", headers: getAuthHeaders() })
       .then((res) => res.json().catch(() => null))
       .then((json) => {
         if (!alive) return;

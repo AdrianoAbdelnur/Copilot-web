@@ -1,4 +1,5 @@
 import { connectDB } from "@/lib/db";
+import { getTenantContext } from "@/lib/tenant";
 import Route from "@/models/RouteMap";
 import { parseKmlToPolicyPack } from "@/lib/policy/parseKml";
 import type { PolicyPack } from "@/lib/policy/types";
@@ -70,6 +71,13 @@ const parseGoogleDraft = (raw: unknown) => {
 
 export async function POST(req: Request) {
   await connectDB();
+  const tenantContext = await getTenantContext(req);
+  if (!tenantContext.ok) {
+    return Response.json(
+      { ok: false, error: tenantContext.error, message: tenantContext.message },
+      { status: tenantContext.status },
+    );
+  }
 
   const body = await req.json();
   const title = String(body?.title ?? "route 1").trim();
@@ -96,6 +104,7 @@ export async function POST(req: Request) {
   }
 
   const payload: any = {
+    companyId: tenantContext.tenantId,
     title,
     kml: kml || null,
     policyPack,
@@ -132,10 +141,18 @@ export async function POST(req: Request) {
   });
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   await connectDB();
 
-  const items = await Route.find({})
+  const tenantContext = await getTenantContext(req);
+  if (!tenantContext.ok) {
+    return Response.json(
+      { ok: false, error: tenantContext.error, message: tenantContext.message },
+      { status: tenantContext.status },
+    );
+  }
+
+  const items = await Route.find({ companyId: tenantContext.tenantId })
     .select("title createdAt updatedAt nav")
     .sort({ createdAt: -1 })
     .lean();

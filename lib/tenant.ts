@@ -15,7 +15,7 @@ type TenantContextOk = {
   tenantId: string;
   tenantRole: string;
   memberships: TenantMembership[];
-  source: "header";
+  source: "header" | "default_company" | "first_membership";
 };
 
 type TenantContextErr = {
@@ -123,6 +123,35 @@ export async function getTenantContext(
       tenantRole: hit.tenantRole,
       memberships,
       source: "header",
+    };
+  }
+
+  const defaultCompanyId = toId(user.defaultCompanyId);
+  if (defaultCompanyId) {
+    const defaultMembership = memberships.find((m) => m.companyId === defaultCompanyId);
+    if (defaultMembership) {
+      return {
+        ok: true,
+        userId,
+        role: role || toId(user.role),
+        tenantId: defaultMembership.companyId,
+        tenantRole: defaultMembership.tenantRole,
+        memberships,
+        source: "default_company",
+      };
+    }
+  }
+
+  const firstMembership = memberships[0];
+  if (firstMembership) {
+    return {
+      ok: true,
+      userId,
+      role: role || toId(user.role),
+      tenantId: firstMembership.companyId,
+      tenantRole: firstMembership.tenantRole,
+      memberships,
+      source: "first_membership",
     };
   }
 

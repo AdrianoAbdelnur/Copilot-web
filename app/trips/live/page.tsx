@@ -90,11 +90,19 @@ function messageStatusLabel(status: ChatMessageItem["status"]): string {
 }
 
 function messageStatusTone(status: ChatMessageItem["status"]): string {
-  if (status === "read") return "border-emerald-200 bg-emerald-100 text-emerald-800";
-  if (status === "spoken") return "border-blue-200 bg-blue-100 text-blue-800";
-  if (status === "delivered") return "border-amber-200 bg-amber-100 text-amber-800";
-  if (status === "sent") return "border-slate-200 bg-slate-100 text-slate-700";
-  return "border-slate-200 bg-slate-100 text-slate-700";
+  if (status === "read") {
+    return "border-emerald-200 bg-emerald-100 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100";
+  }
+  if (status === "spoken") {
+    return "border-blue-200 bg-blue-100 text-blue-800 dark:border-blue-700 dark:bg-blue-900/40 dark:text-blue-100";
+  }
+  if (status === "delivered") {
+    return "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-100";
+  }
+  if (status === "sent") {
+    return "border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100";
+  }
+  return "border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100";
 }
 
 function messageStatusTimestamp(message: ChatMessageItem): string | null {
@@ -613,18 +621,18 @@ export default function LiveTripsMapPage() {
 
         {chatOpenForItemId && chatTarget ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
-            <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
+            <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-4 shadow-xl dark:border-slate-700 dark:bg-slate-900">
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-lg font-black tracking-tight text-slate-900">Chat con chofer</div>
-                  <div className="text-sm text-slate-500">
+                  <div className="text-lg font-black tracking-tight text-slate-900 dark:text-slate-100">Chat con chofer</div>
+                  <div className="text-sm text-slate-500 dark:text-slate-300">
                     {driverLabel(chatTarget)} {chatTarget.route.title ? `- ${chatTarget.route.title}` : ""}
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setChatOpenForItemId(null)}
-                  className="rounded border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700"
+                  className="rounded border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                 >
                   Cerrar
                 </button>
@@ -638,26 +646,26 @@ export default function LiveTripsMapPage() {
               ) : null}
 
               <div className="mb-2 flex items-center justify-between gap-2">
-                <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Conversacion</div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-300">Conversacion</div>
                 <button
                   type="button"
                   onClick={() => void loadChatHistory()}
-                  className="rounded border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700"
+                  className="rounded border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                 >
                   {chatHistoryLoading ? "Cargando..." : "Actualizar"}
                 </button>
               </div>
 
-              <div ref={chatScrollRef} className="mb-3 h-64 overflow-auto rounded border border-slate-200 bg-slate-50">
+              <div ref={chatScrollRef} className="mb-3 h-64 overflow-auto rounded border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-950">
                 <div className="flex min-h-full flex-col justify-end gap-2 p-2">
                   {chatHistoryError ? (
                     <div className="rounded border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700">{chatHistoryError}</div>
                   ) : null}
                   {chatHistoryLoading && sortedChatHistory.length === 0 ? (
-                    <div className="text-xs text-slate-500">Cargando mensajes...</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-300">Cargando mensajes...</div>
                   ) : null}
                   {!chatHistoryLoading && sortedChatHistory.length === 0 ? (
-                    <div className="text-xs text-slate-500">No hay mensajes para este viaje.</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-300">No hay mensajes para este viaje.</div>
                   ) : null}
                   {sortedChatHistory.map((msg) => {
                     const isDriver = msg.senderType === "driver";
@@ -668,8 +676,8 @@ export default function LiveTripsMapPage() {
                         <div
                           className={`max-w-[84%] rounded-2xl px-3 py-2 shadow-sm ${
                             isDriver
-                              ? "border border-emerald-200 bg-emerald-50 text-emerald-950"
-                              : "border border-sky-200 bg-sky-50 text-sky-950"
+                              ? "border border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-100"
+                              : "border border-sky-200 bg-sky-50 text-sky-950 dark:border-sky-700 dark:bg-sky-950/60 dark:text-sky-100"
                           }`}
                         >
                           <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider opacity-80">
@@ -685,7 +693,7 @@ export default function LiveTripsMapPage() {
                             </span>
                             {possibleLost ? (
                               <span
-                                className="inline-flex items-center rounded-full border border-rose-200 bg-rose-100 px-2 py-0.5 font-semibold text-rose-800"
+                                className="inline-flex items-center rounded-full border border-rose-200 bg-rose-100 px-2 py-0.5 font-semibold text-rose-800 dark:border-rose-700 dark:bg-rose-900/50 dark:text-rose-100"
                                 title="Sigue en enviado sin acuse del dispositivo"
                               >
                                 posible perdido
@@ -721,11 +729,11 @@ export default function LiveTripsMapPage() {
                 rows={5}
                 maxLength={140}
                 placeholder="Escribe un mensaje para el chofer..."
-                className="mb-2 w-full rounded border border-slate-200 bg-white p-2 text-sm text-slate-800 outline-none focus:border-[#137fec]"
+                className="mb-2 w-full rounded border border-slate-200 bg-white p-2 text-sm text-slate-800 outline-none focus:border-[#137fec] dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-400"
               />
 
               <div className="flex items-center justify-between gap-2">
-                <div className="text-xs text-slate-500">{chatText.trim().length}/140</div>
+                <div className="text-xs text-slate-500 dark:text-slate-300">{chatText.trim().length}/140</div>
                 <button
                   type="button"
                   onClick={() => void sendChatMessage()}

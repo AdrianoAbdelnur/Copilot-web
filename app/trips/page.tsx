@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getAuthHeaders } from "@/lib/clientSession";
 
 type UserItem = {
@@ -173,7 +173,10 @@ export default function TripsPage() {
   const [tripDetail, setTripDetail] = useState<any>(null);
   const [tripEvents, setTripEvents] = useState<any[]>([]);
   const [tripSamples, setTripSamples] = useState<any[]>([]);
+  const [tripDetailLoading, setTripDetailLoading] = useState(false);
+  const [tripDetailError, setTripDetailError] = useState("");
   const [realDistanceByTripId, setRealDistanceByTripId] = useState<Record<string, number>>({});
+  const tripDetailReqSeqRef = useRef(0);
 
   const [driverFilter, setDriverFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -395,6 +398,7 @@ export default function TripsPage() {
         setTripDetail(null);
         setTripEvents([]);
         setTripSamples([]);
+        setTripDetailError("");
       }
       setMsg("Viaje eliminado.");
       await loadAll();
@@ -403,22 +407,61 @@ export default function TripsPage() {
     }
   };
 
-  const loadTripDetail = async (tripId: string) => {
-    setSelectedPlanId("");
-    setSelectedTripId(tripId);
-    const [tripRes, eventsRes, samplesRes] = await Promise.all([
-      fetch(`/api/trips/${tripId}`, { headers: getAuthHeaders() }),
-      fetch(`/api/trips/${tripId}/events?limit=200`, { headers: getAuthHeaders() }),
-      fetch(`/api/trips/${tripId}/samples?limit=200`, { headers: getAuthHeaders() }),
-    ]);
+  const loadTripDetail = async (
+    tripId: string,
+    options?: { preserveSelection?: boolean; silent?: boolean }
+  ) => {
+    const preserveSelection = !!options?.preserveSelection;
+    const silent = !!options?.silent;
+    const reqSeq = ++tripDetailReqSeqRef.current;
 
-    const tripJson = await tripRes.json().catch(() => ({}));
-    const eventsJson = await eventsRes.json().catch(() => ({}));
-    const samplesJson = await samplesRes.json().catch(() => ({}));
+    if (!preserveSelection) {
+      setSelectedPlanId("");
+      setSelectedTripId(tripId);
+      setTripDetailError("");
+    }
 
-    setTripDetail(tripJson?.item ?? null);
-    setTripEvents(eventsJson?.items ?? []);
-    setTripSamples(samplesJson?.items ?? []);
+    if (!silent) setTripDetailLoading(true);
+
+    try {
+      const [tripRes, eventsRes, samplesRes] = await Promise.all([
+        fetch(`/api/trips/${tripId}`, { headers: getAuthHeaders() }),
+        fetch(`/api/trips/${tripId}/events?limit=200`, { headers: getAuthHeaders() }),
+        fetch(`/api/trips/${tripId}/samples?limit=200`, { headers: getAuthHeaders() }),
+      ]);
+
+      const tripJson = await tripRes.json().catch(() => ({}));
+      const eventsJson = await eventsRes.json().catch(() => ({}));
+      const samplesJson = await samplesRes.json().catch(() => ({}));
+
+      if (reqSeq !== tripDetailReqSeqRef.current) return;
+
+      const hasTrip = tripRes.ok && tripJson?.ok && tripJson?.item;
+      if (!hasTrip) {
+        setTripDetailError(tripJson?.error || "No se pudo cargar el detalle del viaje.");
+        if (!tripDetail || String(tripDetail?._id || "") !== String(tripId)) {
+          setTripDetail(null);
+          setTripEvents([]);
+          setTripSamples([]);
+        }
+        return;
+      }
+
+      setTripDetailError("");
+      setTripDetail(tripJson.item);
+      setTripEvents(Array.isArray(eventsJson?.items) ? eventsJson.items : []);
+      setTripSamples(Array.isArray(samplesJson?.items) ? samplesJson.items : []);
+    } catch {
+      if (reqSeq !== tripDetailReqSeqRef.current) return;
+      setTripDetailError("No se pudo actualizar el detalle del viaje.");
+      if (!tripDetail || String(tripDetail?._id || "") !== String(tripId)) {
+        setTripDetail(null);
+        setTripEvents([]);
+        setTripSamples([]);
+      }
+    } finally {
+      if (reqSeq === tripDetailReqSeqRef.current && !silent) setTripDetailLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -434,6 +477,14 @@ export default function TripsPage() {
     }, 15000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (!selectedTripId) return;
+    const id = setInterval(() => {
+      void loadTripDetail(selectedTripId, { preserveSelection: true, silent: true });
+    }, 5000);
+    return () => clearInterval(id);
+  }, [selectedTripId]);
 
   const filteredLiveTrips = useMemo(() => {
     return liveTrips.filter((trip) => {
@@ -629,6 +680,7 @@ export default function TripsPage() {
                       setTripDetail(null);
                       setTripEvents([]);
                       setTripSamples([]);
+                      setTripDetailError("");
                     }}
                     className={`w-full rounded-xl border-l-4 bg-white p-4 text-left shadow-sm transition hover:shadow-md ${
                       selected ? "border-l-amber-500 ring-2 ring-amber-300/30" : "border-l-amber-400"
@@ -672,7 +724,9 @@ export default function TripsPage() {
                 return (
                   <button
                     key={trip._id}
-                    onClick={() => loadTripDetail(trip._id)}
+                    onClick={() => {
+                      void loadTripDetail(trip._id);
+                    }}
                     className={`w-full rounded-xl border-l-4 bg-white p-4 text-left shadow-sm transition hover:shadow-md ${
                       selected ? "border-l-[#137fec] ring-2 ring-[#137fec]/20" : trip.status === "paused" ? "border-l-amber-400" : "border-l-[#137fec]"
                     } border border-slate-200`}
@@ -734,16 +788,42 @@ export default function TripsPage() {
                 <span className="text-[10px] font-black uppercase tracking-widest text-blue-300">Seguimiento</span>
                 <span className="inline-flex items-center gap-2 text-xs font-bold">
                   <span className="h-2 w-2 animate-pulse rounded-full bg-[#137fec]" />
-                  {tripDetail ? tripStatusLabel(tripDetail.status).toUpperCase() : "SIN SELECCIÓN"}
+                  {tripDetail
+                    ? tripStatusLabel(tripDetail.status).toUpperCase()
+                    : selectedTripId
+                      ? "SELECCIONADO"
+                      : "SIN SELECCIÓN"}
                 </span>
               </div>
-              <h3 className="truncate text-lg font-bold">{tripDetail ? `#${tripDetail._id.slice(-8)}` : "Detalle de viaje"}</h3>
+              <h3 className="truncate text-lg font-bold">
+                {tripDetail
+                  ? `#${tripDetail._id.slice(-8)}`
+                  : selectedTripId
+                    ? `#${selectedTripId.slice(-8)}`
+                    : "Detalle de viaje"}
+              </h3>
               <p className="mt-1 break-words text-xs text-slate-300">
-                {tripDetail ? resolveRouteDisplayFromTripDetail(tripDetail, routeById) : "Seleccioná un viaje para ver información detallada"}
+                {tripDetail
+                  ? resolveRouteDisplayFromTripDetail(tripDetail, routeById)
+                  : selectedTripId
+                    ? "Cargando información del viaje seleccionado"
+                    : "Seleccioná un viaje para ver información detallada"}
               </p>
             </div>
 
             <div className="max-h-[680px] overflow-auto p-5">
+              {tripDetailLoading ? (
+                <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                  Cargando detalle...
+                </div>
+              ) : null}
+
+              {tripDetailError ? (
+                <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  {tripDetailError}
+                </div>
+              ) : null}
+
               {!tripDetail ? (
                 <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
                   Seleccioná un viaje para ver detalle.
