@@ -63,8 +63,13 @@ nav: {
     validatedAt: { type: Date, default: null },
     matchPct: { type: Number, default: 0 },
     outCount: { type: Number, default: 0 },
+    reverseMatchPct: { type: Number, default: 0 },
+    reverseOutCount: { type: Number, default: 0 },
     pass: { type: Boolean, default: false },
     promoted: { type: Boolean, default: false },
+    manualApproval: { type: Boolean, default: false },
+    manualApprovalAt: { type: Date, default: null },
+    manualApprovalReason: { type: String, default: "" },
   },
 },
 

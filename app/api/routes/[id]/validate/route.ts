@@ -39,6 +39,12 @@ export async function GET(req: Request, ctx: Ctx) {
 export async function POST(req: Request, ctx: Ctx) {
   await connectDB();
   const { id } = await ctx.params;
+  const body = await req.json().catch(() => ({} as any));
+  const forceApprove = Boolean(body?.forceApprove);
+  const manualApprovalReason =
+    typeof body?.manualApprovalReason === "string"
+      ? body.manualApprovalReason.trim()
+      : "";
 
   const doc = await Route.findById(id);
   if (!doc) {
@@ -87,7 +93,7 @@ export async function POST(req: Request, ctx: Ctx) {
     outCount === 0 &&
     reverseOutCount === 0;
 
-  if (pass) {
+  if (pass || forceApprove) {
     const totals = computeTotalsFromSteps(candGoogle.steps ?? []);
 
     doc.google = {
@@ -107,6 +113,11 @@ export async function POST(req: Request, ctx: Ctx) {
       outCount,
       pass: true,
       promoted: true,
+      reverseMatchPct,
+      reverseOutCount,
+      manualApproval: !pass && forceApprove,
+      manualApprovalAt: !pass && forceApprove ? new Date() : null,
+      manualApprovalReason: !pass && forceApprove ? manualApprovalReason : "",
     };
     doc.markModified("nav.validate");
 
@@ -117,7 +128,9 @@ export async function POST(req: Request, ctx: Ctx) {
     await doc.save();
 
     rev.stage = "final";
-    rev.note = "validated 100% -> promoted";
+    rev.note = pass
+      ? "validated 100% -> promoted"
+      : `validated manual approve -> promoted${manualApprovalReason ? ` (${manualApprovalReason})` : ""}`;
     rev.markModified("stage");
     rev.markModified("note");
     await rev.save();
@@ -132,6 +145,7 @@ export async function POST(req: Request, ctx: Ctx) {
         outCount,
         reverseMatchPct,
         reverseOutCount,
+        manualApproval: !pass && forceApprove,
       },
       totals,
       meta: { corridorM: r.corridorM },
