@@ -452,12 +452,7 @@ function RoutesPageContent() {
       const ver = data?.newRevision?.version ?? "?";
 
       setValidateMsg(`${t.messages.notPromoted}. match=${pct}% out=${out} rev=${reversePct}% revOut=${reverseOut}, nueva versión v${ver}`);
-      setNextStepModal({
-        open: true,
-        title: `La ruta coincide en ${pct}%`,
-        message: "No llega al 100%. ¿Querés aprobarla igualmente?",
-        mode: "manual-approve",
-      });
+      openManualApprovePrompt(String(pct));
 
       setMatchReport(data?.report ?? null);
       setClusters([]);
@@ -529,6 +524,25 @@ function RoutesPageContent() {
     }
   };
 
+  const openManualApprovePrompt = (pctText: string) => {
+    setNextStepModal({
+      open: true,
+      title: `La ruta coincide en ${pctText}%`,
+      message: "No llega al 100%. ¿Querés aprobarla igualmente?",
+      mode: "manual-approve",
+    });
+    if (typeof window !== "undefined") {
+      window.setTimeout(() => {
+        const modalVisible = Boolean(
+          document.querySelector('[data-manual-approve-modal=\"1\"]')
+        );
+        if (!modalVisible) {
+          const ok = window.confirm(`La ruta coincide en ${pctText}%. ¿Aprobar igualmente?`);
+          if (ok) void approveRouteAnyway();
+        }
+      }, 50);
+    }
+  };
   const runFullProcess = async () => {
     if (!selectedId || runningPipeline) return;
 
@@ -714,12 +728,7 @@ function RoutesPageContent() {
       const reverseOut = validateJson?.validated?.reverseOutCount ?? "?";
       const ver = validateJson?.newRevision?.version ?? "?";
       setValidateMsg(`${t.messages.notPromoted}. match=${pct}% out=${out} rev=${reversePct}% revOut=${reverseOut}, nueva version v${ver}`);
-      setNextStepModal({
-        open: true,
-        title: `La ruta coincide en ${pct}%`,
-        message: "No llega al 100%. ¿Querés aprobarla igualmente?",
-        mode: "manual-approve",
-      });
+      openManualApprovePrompt(String(pct));
       setMatchReport(validateJson?.report ?? null);
     } catch (e: any) {
       setValidateMsg(e?.message ? `Error: ${e.message}` : "Error en proceso completo");
@@ -971,6 +980,16 @@ function RoutesPageContent() {
                           onChange={(e) => setGapIdx(Math.max(1, Number(e.target.value) || 1))}
                         />
                       </div>
+                      {!isFullyValidated ? (
+                        <Button
+                          variant="secondary"
+                          onClick={() => openManualApprovePrompt(displayedMatchPct?.toFixed?.(2) ?? "?")}
+                          disabled={validating || !selectedId}
+                          className="w-full"
+                        >
+                          Aprobar ruta
+                        </Button>
+                      ) : null}
                       {isFullyValidated ? (
                         <Button
                           variant="secondary"
@@ -1018,14 +1037,7 @@ function RoutesPageContent() {
                         {!isFullyValidated ? (
                           <Button
                             variant="secondary"
-                            onClick={() =>
-                              setNextStepModal({
-                                open: true,
-                                title: `La ruta coincide en ${displayedMatchPct?.toFixed?.(2) ?? "?"}%`,
-                                message: "No llega al 100%. ¿Querés aprobarla igualmente?",
-                                mode: "manual-approve",
-                              })
-                            }
+                            onClick={() => openManualApprovePrompt(displayedMatchPct?.toFixed?.(2) ?? "?")}
                             disabled={validating || !selectedId}
                             className="w-full"
                           >
@@ -1062,7 +1074,10 @@ function RoutesPageContent() {
       </div>
 
       {nextStepModal.open ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/55 px-4">
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-900/55 px-4"
+          data-manual-approve-modal={nextStepModal.mode === "manual-approve" ? "1" : "0"}
+        >
           <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
             <div className="mb-2 text-base font-bold text-emerald-700">{nextStepModal.title}</div>
             <p className="text-sm text-slate-700">{nextStepModal.message}</p>
@@ -1124,3 +1139,4 @@ export default function RoutesPage() {
     </Suspense>
   );
 }
+
