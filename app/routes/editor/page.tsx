@@ -173,7 +173,9 @@ function RoutesPageContent() {
 
       const outCount = report?.outOfCorridorPoints?.length ?? "?";
       const pct = report?.matchPct?.toFixed?.(2) ?? "?";
-      setMatchMsg(`OK coincidencia=${pct}% fuera=${outCount}`);
+      const reverseOut = report?.reverseOutOfCorridorPoints?.length ?? "?";
+      const reversePct = report?.googleToPolicy?.matchPct?.toFixed?.(2) ?? "?";
+      setMatchMsg(`OK coincidencia=${pct}% fuera=${outCount} rev=${reversePct}% revFuera=${reverseOut}`);
 
       return report;
     } catch (e: any) {
@@ -443,9 +445,11 @@ function RoutesPageContent() {
 
       const pct = data?.validated?.matchPct?.toFixed?.(2) ?? "?";
       const out = data?.validated?.outCount ?? "?";
+      const reversePct = data?.validated?.reverseMatchPct?.toFixed?.(2) ?? "?";
+      const reverseOut = data?.validated?.reverseOutCount ?? "?";
       const ver = data?.newRevision?.version ?? "?";
 
-      setValidateMsg(`${t.messages.notPromoted}. match=${pct}% out=${out}, nueva versión v${ver}`);
+      setValidateMsg(`${t.messages.notPromoted}. match=${pct}% out=${out} rev=${reversePct}% revOut=${reverseOut}, nueva versión v${ver}`);
 
       setMatchReport(data?.report ?? null);
       setClusters([]);
@@ -492,7 +496,9 @@ function RoutesPageContent() {
       }
       const report = matchJson?.report ?? null;
       setMatchReport(report);
-      setMatchMsg(`OK coincidencia=${report?.matchPct?.toFixed?.(2) ?? "?"}% fuera=${report?.outOfCorridorPoints?.length ?? "?"}`);
+      setMatchMsg(
+        `OK coincidencia=${report?.matchPct?.toFixed?.(2) ?? "?"}% fuera=${report?.outOfCorridorPoints?.length ?? "?"} rev=${report?.googleToPolicy?.matchPct?.toFixed?.(2) ?? "?"}% revFuera=${report?.reverseOutOfCorridorPoints?.length ?? "?"}`
+      );
 
       setDiagnoseMsg("Diagnosticando...");
       const plansRes = await fetch(`/api/routes/${selectedId}/plans`, {
@@ -639,8 +645,10 @@ function RoutesPageContent() {
 
       const pct = validateJson?.validated?.matchPct?.toFixed?.(2) ?? "?";
       const out = validateJson?.validated?.outCount ?? "?";
+      const reversePct = validateJson?.validated?.reverseMatchPct?.toFixed?.(2) ?? "?";
+      const reverseOut = validateJson?.validated?.reverseOutCount ?? "?";
       const ver = validateJson?.newRevision?.version ?? "?";
-      setValidateMsg(`${t.messages.notPromoted}. match=${pct}% out=${out}, nueva version v${ver}`);
+      setValidateMsg(`${t.messages.notPromoted}. match=${pct}% out=${out} rev=${reversePct}% revOut=${reverseOut}, nueva version v${ver}`);
       setMatchReport(validateJson?.report ?? null);
     } catch (e: any) {
       setValidateMsg(e?.message ? `Error: ${e.message}` : "Error en proceso completo");

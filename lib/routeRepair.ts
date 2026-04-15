@@ -255,7 +255,16 @@ function pickKmlWaypointsBetween(
   const span = b - a;
   if (span <= 1) return [];
 
-  const want = Math.min(maxWaypoints, span - 1);
+  let segmentLenM = 0;
+  for (let i = a + 1; i <= b; i++) {
+    segmentLenM += haversineM(policyRoute[i - 1], policyRoute[i]);
+  }
+
+  // Adaptive cap for dense urban repairs:
+  // too many "via:" points over-constrain Directions and can create loops.
+  const adaptiveByLen = clamp(Math.floor(segmentLenM / 220), 1, 12);
+  const urbanCap = segmentLenM < 3000 ? 8 : 12;
+  const want = Math.min(maxWaypoints, span - 1, adaptiveByLen, urbanCap);
 
   const idxByKey = new Map<string, number>();
   for (let i = 0; i < policyRoute.length; i++) {
@@ -353,7 +362,21 @@ function pickKmlWaypointsBetween(
     .sort((x, y) => x - y)
     .slice(0, want);
 
-  return allIdxs.map((i) => policyRoute[i]);
+  const minWaypointSeparationM = 100;
+  const out: LatLng[] = [];
+  for (const idx of allIdxs) {
+    const candidate = policyRoute[idx];
+    const last = out[out.length - 1];
+    if (!last || haversineM(last, candidate) >= minWaypointSeparationM) {
+      out.push(candidate);
+    }
+  }
+
+  if (!out.length && allIdxs.length > 0) {
+    out.push(policyRoute[allIdxs[Math.floor(allIdxs.length / 2)]]);
+  }
+
+  return out;
 }
 
 export function getPolicyRouteFromDoc(doc: any): LatLng[] {

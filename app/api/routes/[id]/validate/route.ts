@@ -125,7 +125,14 @@ export async function POST(req: Request, ctx: Ctx) {
     return Response.json({
       ok: true,
       id: String(doc._id),
-      validated: { pass: true, promoted: true, matchPct, outCount },
+      validated: {
+        pass: true,
+        promoted: true,
+        matchPct,
+        outCount,
+        reverseMatchPct,
+        reverseOutCount,
+      },
       totals,
       meta: { corridorM: r.corridorM },
     });
@@ -163,7 +170,14 @@ export async function POST(req: Request, ctx: Ctx) {
   return Response.json({
     ok: true,
     id: String(doc._id),
-    validated: { pass: false, promoted: false, matchPct, outCount },
+    validated: {
+      pass: false,
+      promoted: false,
+      matchPct,
+      outCount,
+      reverseMatchPct,
+      reverseOutCount,
+    },
     newRevision: {
       id: String(newRev._id),
       version: newRev.version,
