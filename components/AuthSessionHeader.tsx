@@ -193,9 +193,18 @@ export default function AuthSessionHeader() {
   const selectedTenant = activeMemberships.find((m) => m.companyId === activeTenantId) || null;
   const tenantName = branding?.appName || branding?.companyName || selectedTenant?.companyName || "";
 
-  const onLogout = () => {
-    clearClientSession();
-    router.replace("/login");
+  const onLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        cache: "no-store",
+      });
+    } catch {
+      // Client cleanup still guarantees local logout UX.
+    } finally {
+      clearClientSession();
+      router.replace("/login");
+    }
   };
 
   const onSelectTenant = (tenantId: string) => {

@@ -41,7 +41,7 @@ export default function LoginPage() {
         user: data?.user ?? null,
       });
 
-      router.push("/");
+      router.replace("/");
     } catch {
       setError("Error de red");
     } finally {
