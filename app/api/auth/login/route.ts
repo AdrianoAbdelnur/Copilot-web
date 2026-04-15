@@ -44,7 +44,7 @@ export async function POST(req: Request) {
                 .filter((m: { companyId: string }) => m.companyId.length > 0)
             : [];
 
-        return NextResponse.json(
+        const res = NextResponse.json(
             {
                 message: "Logged in.",
                 token,
@@ -57,6 +57,16 @@ export async function POST(req: Request) {
             },
             { status: 200 }
         );
+
+        res.cookies.set("token", token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "lax",
+            path: "/",
+            maxAge: 60 * 60 * 24 * 7,
+        });
+
+        return res;
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Server error";
         return NextResponse.json({ message }, { status: 500 });

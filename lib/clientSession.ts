@@ -107,7 +107,6 @@ export function setClientSession(args: {
     "";
 
   window.localStorage.setItem(TOKEN_KEY, token);
-  document.cookie = `token=${encodeURIComponent(token)}; Path=/; Max-Age=${60 * 60 * 24 * 7}; SameSite=Lax`;
   window.localStorage.setItem(MEMBERSHIPS_KEY, JSON.stringify(memberships));
   setClientTenantId(nextTenantId || null);
 }
@@ -117,7 +116,6 @@ export function clearClientSession(): void {
   window.localStorage.removeItem(TOKEN_KEY);
   window.localStorage.removeItem(ACTIVE_TENANT_KEY);
   window.localStorage.removeItem(MEMBERSHIPS_KEY);
-  document.cookie = "token=; Path=/; Max-Age=0; SameSite=Lax";
 }
 
 export function getAuthHeaders(extra?: HeadersInit): HeadersInit {
@@ -131,4 +129,3 @@ export function getAuthHeaders(extra?: HeadersInit): HeadersInit {
     ...(extra as Record<string, string> | undefined),
   };
 }
-
