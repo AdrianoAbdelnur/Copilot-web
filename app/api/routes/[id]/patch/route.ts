@@ -12,6 +12,19 @@ export const runtime = "nodejs";
 
 type Ctx = { params: Promise<{ id: string }> };
 
+function haversineM(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) {
+  const R = 6371000;
+  const toRad = (x: number) => (x * Math.PI) / 180;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLng = toRad(b.longitude - a.longitude);
+  const lat1 = toRad(a.latitude);
+  const lat2 = toRad(b.latitude);
+  const h =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
 function computeStepStats(steps: any[]) {
   const safe = Array.isArray(steps) ? steps : [];
   const distanceM = safe.reduce((acc: number, s: any) => acc + (Number(s?.distance?.value) || 0), 0);
@@ -109,11 +122,21 @@ export async function POST(req: Request, ctx: Ctx) {
       originalStats.distanceM > 0 ? patchedStats.distanceM / originalStats.distanceM : 1;
     const stepRatio =
       originalStats.stepCount > 0 ? patchedStats.stepCount / originalStats.stepCount : 1;
+    const directODM =
+      origin && destination ? haversineM(origin, destination) : 0;
+    const detourVsDirect =
+      directODM > 0 ? patchedStats.distanceM / directODM : 1;
     const tooLong = originalStats.distanceM >= 250 && distanceRatio > 2.2;
     const tooManySteps = originalStats.stepCount >= 2 && stepRatio > 3.0;
+    const absurdDetour = directODM >= 200 && detourVsDirect > 3.0;
 
-    if (tooLong || tooManySteps) {
+    if (tooLong || tooManySteps || absurdDetour) {
       guardrailRejected += 1;
+      const reason = tooLong
+        ? "distance_ratio"
+        : tooManySteps
+        ? "step_ratio"
+        : "detour_vs_direct";
       patchedSegments.push({
         clusterIdx: plan.clusterIdx,
         origin,
@@ -121,9 +144,10 @@ export async function POST(req: Request, ctx: Ctx) {
         waypoints,
         google: {
           status: "REJECTED_GUARDRAIL",
-          reason: tooLong ? "distance_ratio" : "step_ratio",
+          reason,
           distanceRatio,
           stepRatio,
+          detourVsDirect,
           overviewPolyline: null,
           densePath: [],
           steps: [],
