@@ -12,6 +12,28 @@ export const runtime = "nodejs";
 
 type Ctx = { params: Promise<{ id: string }> };
 
+function computeStepStats(steps: any[]) {
+  const safe = Array.isArray(steps) ? steps : [];
+  const distanceM = safe.reduce((acc: number, s: any) => acc + (Number(s?.distance?.value) || 0), 0);
+  return {
+    stepCount: safe.length,
+    distanceM,
+  };
+}
+
+function getOriginalSegmentStats(doc: any, plan: any) {
+  const allSteps = Array.isArray(doc?.google?.steps) ? doc.google.steps : [];
+  if (!allSteps.length) return { stepCount: 0, distanceM: 0 };
+
+  const a = Number.isFinite(plan?.stepIdxStart) ? Math.floor(plan.stepIdxStart) : 0;
+  const b = Number.isFinite(plan?.stepIdxEnd) ? Math.floor(plan.stepIdxEnd) : 0;
+  const start = Math.max(0, Math.min(a, b));
+  const end = Math.min(allSteps.length - 1, Math.max(a, b));
+  if (end < start) return { stepCount: 0, distanceM: 0 };
+
+  return computeStepStats(allSteps.slice(start, end + 1));
+}
+
 export async function POST(req: Request, ctx: Ctx) {
   await connectDB();
   const { id } = await ctx.params;
@@ -56,6 +78,7 @@ export async function POST(req: Request, ctx: Ctx) {
   }
 
   const patchedSegments: any[] = [];
+  let guardrailRejected = 0;
 
   for (const plan of plans) {
     const origin = plan.requestOrigin;
@@ -78,6 +101,36 @@ export async function POST(req: Request, ctx: Ctx) {
     const route0 = r.json.routes[0];
     const legs = route0.legs ?? [];
     const overview = route0.overview_polyline?.points ?? null;
+    const normalizedSteps = normalizeSteps(legs);
+    const patchedStats = computeStepStats(normalizedSteps);
+    const originalStats = getOriginalSegmentStats(doc, plan);
+
+    const distanceRatio =
+      originalStats.distanceM > 0 ? patchedStats.distanceM / originalStats.distanceM : 1;
+    const stepRatio =
+      originalStats.stepCount > 0 ? patchedStats.stepCount / originalStats.stepCount : 1;
+    const tooLong = originalStats.distanceM >= 250 && distanceRatio > 2.2;
+    const tooManySteps = originalStats.stepCount >= 2 && stepRatio > 3.0;
+
+    if (tooLong || tooManySteps) {
+      guardrailRejected += 1;
+      patchedSegments.push({
+        clusterIdx: plan.clusterIdx,
+        origin,
+        destination,
+        waypoints,
+        google: {
+          status: "REJECTED_GUARDRAIL",
+          reason: tooLong ? "distance_ratio" : "step_ratio",
+          distanceRatio,
+          stepRatio,
+          overviewPolyline: null,
+          densePath: [],
+          steps: [],
+        },
+      });
+      continue;
+    }
 
     const densePath = overview ? decodePolyline(overview) : [];
 
@@ -92,7 +145,7 @@ export async function POST(req: Request, ctx: Ctx) {
         overviewPolyline: overview,
         densePath,
         legs,
-        steps: normalizeSteps(legs),
+        steps: normalizedSteps,
         warnings: route0.warnings ?? [],
         waypoint_order: route0.waypoint_order ?? [],
       },
@@ -126,6 +179,6 @@ export async function POST(req: Request, ctx: Ctx) {
       createdAt: rev.createdAt,
     },
     patchedSegments: uiSegments,
-    meta: { patchedCount: uiSegments.length },
+    meta: { patchedCount: uiSegments.length, guardrailRejected },
   });
 }
