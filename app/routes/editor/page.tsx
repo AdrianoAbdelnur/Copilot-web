@@ -66,7 +66,8 @@ function RoutesPageContent() {
     title: string;
     message: string;
     nextHref?: string;
-  }>({ open: false, title: "", message: "" });
+    mode?: "success" | "manual-approve";
+  }>({ open: false, title: "", message: "", mode: "success" });
 
   const [matchReport, setMatchReport] = useState<any>(null);
 
@@ -439,6 +440,7 @@ function RoutesPageContent() {
           title: "Ruta validada",
           message: "Se valido con exito. ¿Deseas agregar detalles de la ruta validada ahora?",
           nextHref: `/routes/marks?routeId=${selectedId}`,
+          mode: "success",
         });
         return;
       }
@@ -450,6 +452,12 @@ function RoutesPageContent() {
       const ver = data?.newRevision?.version ?? "?";
 
       setValidateMsg(`${t.messages.notPromoted}. match=${pct}% out=${out} rev=${reversePct}% revOut=${reverseOut}, nueva versión v${ver}`);
+      setNextStepModal({
+        open: true,
+        title: `La ruta coincide en ${pct}%`,
+        message: "No llega al 100%. ¿Querés aprobarla igualmente?",
+        mode: "manual-approve",
+      });
 
       setMatchReport(data?.report ?? null);
       setClusters([]);
@@ -458,6 +466,62 @@ function RoutesPageContent() {
       setPatchedSegments([]);
       setMerged(null);
       setSelectedClusterIdx(0);
+    } catch (e: any) {
+      setValidateMsg(e?.message ? `Error: ${e.message}` : t.messages.validateFailed);
+    } finally {
+      setValidating(false);
+    }
+  };
+
+  const approveRouteAnyway = async () => {
+    if (!selectedId) return;
+
+    setValidating(true);
+    setValidateMsg("Aprobando ruta manualmente...");
+    try {
+      const r = await fetch(`/api/routes/${selectedId}/validate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ forceApprove: true }),
+      });
+      const data = await r.json().catch(() => null);
+
+      if (!r.ok || !data?.ok) {
+        setValidateMsg(data?.message ? `Error: ${data.message}` : t.messages.validateFailed);
+        return;
+      }
+
+      setItems((prev) =>
+        prev.map((route) =>
+          route._id === selectedId
+            ? { ...route, nav: { ...(route.nav ?? {}), validate: { ...(route.nav?.validate ?? {}), pass: true } } }
+            : route
+        )
+      );
+
+      setSelected((prev: any) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          nav: {
+            ...(prev.nav ?? {}),
+            validate: {
+              ...(prev.nav?.validate ?? {}),
+              ...(data?.validated ?? {}),
+              pass: true,
+            },
+          },
+        };
+      });
+
+      setValidateMsg("Ruta aprobada manualmente.");
+      setNextStepModal({
+        open: true,
+        title: "Ruta validada",
+        message: "Se aprobo manualmente. ¿Deseas agregar detalles de la ruta ahora?",
+        nextHref: `/routes/marks?routeId=${selectedId}`,
+        mode: "success",
+      });
     } catch (e: any) {
       setValidateMsg(e?.message ? `Error: ${e.message}` : t.messages.validateFailed);
     } finally {
@@ -639,6 +703,7 @@ function RoutesPageContent() {
           title: "Ruta validada",
           message: "Se valido con exito. ¿Deseas agregar detalles de la ruta validada ahora?",
           nextHref: `/routes/marks?routeId=${selectedId}`,
+          mode: "success",
         });
         return;
       }
@@ -649,6 +714,12 @@ function RoutesPageContent() {
       const reverseOut = validateJson?.validated?.reverseOutCount ?? "?";
       const ver = validateJson?.newRevision?.version ?? "?";
       setValidateMsg(`${t.messages.notPromoted}. match=${pct}% out=${out} rev=${reversePct}% revOut=${reverseOut}, nueva version v${ver}`);
+      setNextStepModal({
+        open: true,
+        title: `La ruta coincide en ${pct}%`,
+        message: "No llega al 100%. ¿Querés aprobarla igualmente?",
+        mode: "manual-approve",
+      });
       setMatchReport(validateJson?.report ?? null);
     } catch (e: any) {
       setValidateMsg(e?.message ? `Error: ${e.message}` : "Error en proceso completo");
@@ -940,8 +1011,27 @@ function RoutesPageContent() {
                     ) : null}
 
                     {selectedPlanInfo ? (
-                      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
-                        {t.selectedPlan} #{selectedPlanInfo.clusterIdx} | {t.waypoints}={selectedPlanInfo.wp} | {t.stepsFromTo} {selectedPlanInfo.stepStart} a {selectedPlanInfo.stepEnd}
+                      <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                        <div>
+                          {t.selectedPlan} #{selectedPlanInfo.clusterIdx} | {t.waypoints}={selectedPlanInfo.wp} | {t.stepsFromTo} {selectedPlanInfo.stepStart} a {selectedPlanInfo.stepEnd}
+                        </div>
+                        {!isFullyValidated ? (
+                          <Button
+                            variant="secondary"
+                            onClick={() =>
+                              setNextStepModal({
+                                open: true,
+                                title: `La ruta coincide en ${displayedMatchPct?.toFixed?.(2) ?? "?"}%`,
+                                message: "No llega al 100%. ¿Querés aprobarla igualmente?",
+                                mode: "manual-approve",
+                              })
+                            }
+                            disabled={validating || !selectedId}
+                            className="w-full"
+                          >
+                            Aprobar ruta
+                          </Button>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>
@@ -977,24 +1067,48 @@ function RoutesPageContent() {
             <div className="mb-2 text-base font-bold text-emerald-700">{nextStepModal.title}</div>
             <p className="text-sm text-slate-700">{nextStepModal.message}</p>
             <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setNextStepModal((prev) => ({ ...prev, open: false }))}
-                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-              >
-                No por ahora
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const href = nextStepModal.nextHref;
-                  setNextStepModal((prev) => ({ ...prev, open: false }));
-                  if (href) router.push(href);
-                }}
-                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-              >
-                Si, ir a detalles
-              </button>
+              {nextStepModal.mode === "manual-approve" ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setNextStepModal((prev) => ({ ...prev, open: false }))}
+                    className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  >
+                    No aprobar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNextStepModal((prev) => ({ ...prev, open: false }));
+                      void approveRouteAnyway();
+                    }}
+                    className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+                  >
+                    Aprobar
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setNextStepModal((prev) => ({ ...prev, open: false }))}
+                    className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  >
+                    No por ahora
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const href = nextStepModal.nextHref;
+                      setNextStepModal((prev) => ({ ...prev, open: false }));
+                      if (href) router.push(href);
+                    }}
+                    className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+                  >
+                    Si, ir a detalles
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
