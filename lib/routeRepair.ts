@@ -262,8 +262,8 @@ function pickKmlWaypointsBetween(
 
   // Adaptive cap for dense urban repairs:
   // too many "via:" points over-constrain Directions and can create loops.
-  const adaptiveByLen = clamp(Math.floor(segmentLenM / 220), 1, 12);
-  const urbanCap = segmentLenM < 3000 ? 8 : 12;
+  const adaptiveByLen = clamp(Math.floor(segmentLenM / 260), 1, 10);
+  const urbanCap = segmentLenM < 3000 ? 6 : 10;
   const want = Math.min(maxWaypoints, span - 1, adaptiveByLen, urbanCap);
 
   const idxByKey = new Map<string, number>();
@@ -362,7 +362,7 @@ function pickKmlWaypointsBetween(
     .sort((x, y) => x - y)
     .slice(0, want);
 
-  const minWaypointSeparationM = 100;
+  const minWaypointSeparationM = 140;
   const out: LatLng[] = [];
   for (const idx of allIdxs) {
     const candidate = policyRoute[idx];
