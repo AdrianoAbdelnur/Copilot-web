@@ -1,6 +1,9 @@
 import { connectDB } from "@/lib/db";
 import TripPlan from "@/models/TripPlan";
 import { getAuthPayload } from "@/lib/auth";
+import { getTenantContext } from "@/lib/tenant";
+import Route from "@/models/RouteMap";
+import User from "@/models/User";
 import mongoose from "mongoose";
 
 export const runtime = "nodejs";
@@ -72,6 +75,7 @@ export async function POST(req: Request) {
   try {
     const payload = getAuthPayload(req);
     const userId = payload?.user?.id ? String(payload.user.id) : "";
+    const role = payload?.user?.role ? String(payload.user.role).toLowerCase() : "";
     if (!userId) {
       return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
     }
@@ -89,6 +93,13 @@ export async function POST(req: Request) {
       )
     );
     const routeId = String(body?.routeId || "").trim();
+    const requestedCompanyIds: string[] = Array.from(
+      new Set(
+        (Array.isArray(body?.companyIds) ? body.companyIds : [])
+          .map((id: unknown) => String(id || "").trim())
+          .filter((id: string) => id.length > 0),
+      ),
+    );
     const plannedStartAt = new Date(String(body?.plannedStartAt || ""));
 
     const targetDriverIds = driverUserIds.length > 0 ? driverUserIds : [driverUserId];
@@ -99,13 +110,94 @@ export async function POST(req: Request) {
     if (!mongoose.Types.ObjectId.isValid(routeId)) {
       return Response.json({ ok: false, error: "invalid_route_id" }, { status: 400 });
     }
+    if (requestedCompanyIds.some((id) => !mongoose.Types.ObjectId.isValid(id))) {
+      return Response.json({ ok: false, error: "invalid_company_id" }, { status: 400 });
+    }
 
     if (Number.isNaN(plannedStartAt.getTime())) {
       return Response.json({ ok: false, error: "invalid_planned_start" }, { status: 400 });
     }
 
+    let targetCompanyIds: string[] = [];
+    if (requestedCompanyIds.length > 0) {
+      if (role !== "superadmin") {
+        return Response.json({ ok: false, error: "forbidden_company_scope" }, { status: 403 });
+      }
+      targetCompanyIds = requestedCompanyIds;
+    } else {
+      const tenantContext = await getTenantContext(req);
+      if (!tenantContext.ok) {
+        return Response.json(
+          { ok: false, error: tenantContext.error, message: tenantContext.message },
+          { status: tenantContext.status },
+        );
+      }
+      targetCompanyIds = [tenantContext.tenantId];
+    }
+
+    const routeDoc = await Route.findById(routeId).select("companyId").lean();
+    if (!routeDoc) {
+      return Response.json({ ok: false, error: "route_not_found" }, { status: 404 });
+    }
+    const routeCompanyId = routeDoc?.companyId ? String(routeDoc.companyId) : "";
+    if (routeCompanyId && targetCompanyIds.some((companyId) => companyId !== routeCompanyId)) {
+      return Response.json(
+        {
+          ok: false,
+          error: "route_not_in_company_scope",
+          message: "La ruta seleccionada no pertenece a todos los tenants elegidos.",
+          routeCompanyId,
+        },
+        { status: 400 },
+      );
+    }
+
+    const driversFound = await User.find({ _id: { $in: targetDriverIds }, isDeleted: false })
+      .select("memberships")
+      .lean();
+    if (driversFound.length !== targetDriverIds.length) {
+      return Response.json({ ok: false, error: "driver_not_found" }, { status: 404 });
+    }
+
+    const membershipByDriver = new Map<string, Array<{ companyId: string; status: string }>>();
+    for (const row of driversFound as Array<{ _id?: unknown; memberships?: unknown }>) {
+      const id = String(row?._id || "").trim();
+      const memberships = Array.isArray(row?.memberships) ? row.memberships : [];
+      const parsed = memberships
+        .map((m) => {
+          if (!m || typeof m !== "object") return null;
+          const item = m as Record<string, unknown>;
+          const companyId = String(item.companyId || "").trim();
+          const status = String(item.status || "active").trim().toLowerCase() || "active";
+          if (!companyId) return null;
+          return { companyId, status };
+        })
+        .filter((m): m is { companyId: string; status: string } => m !== null);
+      membershipByDriver.set(id, parsed);
+    }
+
+    const invalidDriverScopes: Array<{ driverUserId: string; companyId: string }> = [];
+    for (const companyId of targetCompanyIds) {
+      for (const driverId of targetDriverIds) {
+        const memberships = membershipByDriver.get(driverId) || [];
+        const hasActiveMembership = memberships.some((m) => m.companyId === companyId && m.status !== "inactive");
+        if (!hasActiveMembership) invalidDriverScopes.push({ driverUserId: driverId, companyId });
+      }
+    }
+
+    if (invalidDriverScopes.length > 0) {
+      return Response.json(
+        {
+          ok: false,
+          error: "driver_not_in_company_scope",
+          message: "Hay choferes que no pertenecen a alguno de los tenants elegidos.",
+          invalidDriverScopes,
+        },
+        { status: 400 },
+      );
+    }
+
     const baseDoc = {
-      routeId,
       plannedStartAt,
       status: body?.status || "assigned",
       title: String(body?.title || "").trim(),
@@ -115,10 +207,14 @@ export async function POST(req: Request) {
       createdBy: userId,
     };
 
-    const docs = targetDriverIds.map((id) => ({
-      ...baseDoc,
-      driverUserId: id,
-    }));
+    const docs = targetCompanyIds.flatMap((companyId) =>
+      targetDriverIds.map((id) => ({
+        ...baseDoc,
+        companyId,
+        routeId,
+        driverUserId: id,
+      })),
+    );
 
     const created = await TripPlan.insertMany(docs, { ordered: false });
     const createdIds = created.map((item) => item._id);
