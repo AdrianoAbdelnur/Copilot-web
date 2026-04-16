@@ -9,6 +9,11 @@ import MapUndoOverlay from "./components/MapUndoOverlay";
 import usePlacesAutocomplete from "./hooks/usePlacesAutocomplete";
 import useClickDrawRoute from "./hooks/useClickDrawRoute";
 
+type CompanyItem = {
+  _id: string;
+  name?: string;
+};
+
 export default function RouteBuilderMap() {
   const mapDivRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
@@ -53,6 +58,9 @@ export default function RouteBuilderMap() {
   const [saveLoading, setSaveLoading] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const [saveMessageTone, setSaveMessageTone] = useState<"ok" | "error" | "">("");
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [companies, setCompanies] = useState<CompanyItem[]>([]);
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
   const [saveModal, setSaveModal] = useState<{
     open: boolean;
     title: string;
@@ -63,6 +71,40 @@ export default function RouteBuilderMap() {
   const [isClickDrawing, setIsClickDrawing] = useState(false);
   const [isMapReady, setIsMapReady] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    let mounted = true;
+    void (async () => {
+      try {
+        const meRes = await fetch("/api/users/me", { headers: getAuthHeaders() });
+        const meJson = await meRes.json().catch(() => ({}));
+        const role = String(meJson?.user?.role || "").trim().toLowerCase();
+        const nextIsSuperAdmin = role === "superadmin";
+        if (!mounted) return;
+        setIsSuperAdmin(nextIsSuperAdmin);
+        if (!nextIsSuperAdmin) return;
+
+        const companiesRes = await fetch("/api/companies", { headers: getAuthHeaders() });
+        const companiesJson = await companiesRes.json().catch(() => ({}));
+        const items = Array.isArray(companiesJson?.items) ? (companiesJson.items as CompanyItem[]) : [];
+        if (!mounted) return;
+        setCompanies(items);
+
+        const activeTenantId = String(meJson?.tenant?.tenantId || "").trim();
+        if (activeTenantId) setSelectedCompanyIds([activeTenantId]);
+        else if (items[0]?._id) setSelectedCompanyIds([items[0]._id]);
+      } catch {
+        if (!mounted) return;
+        setIsSuperAdmin(false);
+        setCompanies([]);
+        setSelectedCompanyIds([]);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     waypointsRef.current = waypoints;
@@ -1054,6 +1096,11 @@ export default function RouteBuilderMap() {
       setSaveMessage("Primero traza una ruta valida en el mapa.");
       return;
     }
+    if (isSuperAdmin && selectedCompanyIds.length === 0) {
+      setSaveMessageTone("error");
+      setSaveMessage("Selecciona al menos un tenant destino.");
+      return;
+    }
 
     setSaveLoading(true);
     setSaveMessage("");
@@ -1064,7 +1111,12 @@ export default function RouteBuilderMap() {
       const res = await fetch("/api/routes", {
         method: "POST",
         headers: getAuthHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ title, route, googleDraft }),
+        body: JSON.stringify({
+          title,
+          route,
+          googleDraft,
+          companyIds: isSuperAdmin ? selectedCompanyIds : undefined,
+        }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json?.ok) {
@@ -1073,12 +1125,16 @@ export default function RouteBuilderMap() {
         return;
       }
       setSaveMessageTone("ok");
-      setSaveMessage("Ruta guardada correctamente.");
+      const createdCount = Number(json?.createdCount || 1);
+      setSaveMessage(createdCount > 1 ? `Ruta guardada en ${createdCount} tenants.` : "Ruta guardada correctamente.");
       const createdId = String(json?.id ?? "").trim();
       setSaveModal({
         open: true,
         title: "Ruta guardada",
-        message: "¿Deseas validar la ruta en el editor activo?",
+        message:
+          createdCount > 1
+            ? `La ruta se guardo en ${createdCount} tenants. Deseas validar la primera ruta creada?`
+            : "Deseas validar la ruta en el editor activo?",
         nextHref: createdId ? `/routes/editor?routeId=${createdId}` : undefined,
       });
     } catch {
@@ -1141,6 +1197,15 @@ export default function RouteBuilderMap() {
         onClearRoute={clearRoute}
         onRouteTitleChange={setRouteTitle}
         onSaveRoute={saveRoute}
+        showCompanySelector={isSuperAdmin}
+        companies={companies}
+        selectedCompanyIds={selectedCompanyIds}
+        onToggleCompany={(companyId, checked) => {
+          setSelectedCompanyIds((prev) => {
+            if (checked) return Array.from(new Set([...prev, companyId]));
+            return prev.filter((id) => id !== companyId);
+          });
+        }}
       />
 
       <div style={{ position: "relative", zIndex: 1, minWidth: 0, background: "#e2e8f0" }}>
@@ -1212,3 +1277,5 @@ export default function RouteBuilderMap() {
     </div>
   );
 }
+
+

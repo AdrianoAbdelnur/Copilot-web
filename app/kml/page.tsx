@@ -1,14 +1,22 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getAuthHeaders } from "@/lib/clientSession";
+
+type CompanyItem = {
+  _id: string;
+  name?: string;
+};
 
 export default function KmlPage() {
   const [title, setTitle] = useState("");
   const [fileName, setFileName] = useState("");
   const [size, setSize] = useState(0);
   const [kmlText, setKmlText] = useState("");
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [companies, setCompanies] = useState<CompanyItem[]>([]);
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [modal, setModal] = useState<{
     open: boolean;
@@ -25,6 +33,42 @@ export default function KmlPage() {
   });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    let mounted = true;
+    void (async () => {
+      try {
+        const meRes = await fetch("/api/users/me", { headers: getAuthHeaders() });
+        const meJson = await meRes.json().catch(() => ({}));
+        const role = String(meJson?.user?.role || "").trim().toLowerCase();
+        const nextIsSuperAdmin = role === "superadmin";
+        if (!mounted) return;
+        setIsSuperAdmin(nextIsSuperAdmin);
+        if (!nextIsSuperAdmin) return;
+
+        const companiesRes = await fetch("/api/companies", { headers: getAuthHeaders() });
+        const companiesJson = await companiesRes.json().catch(() => ({}));
+        const items = Array.isArray(companiesJson?.items) ? (companiesJson.items as CompanyItem[]) : [];
+        if (!mounted) return;
+        setCompanies(items);
+
+        const activeTenantId = String(meJson?.tenant?.tenantId || "").trim();
+        if (activeTenantId) {
+          setSelectedCompanyIds([activeTenantId]);
+        } else if (items[0]?._id) {
+          setSelectedCompanyIds([items[0]._id]);
+        }
+      } catch {
+        if (!mounted) return;
+        setIsSuperAdmin(false);
+        setCompanies([]);
+        setSelectedCompanyIds([]);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const formatBytes = (bytes: number) => {
     if (!bytes) return "0 B";
@@ -63,6 +107,8 @@ export default function KmlPage() {
   const toSpanishMessage = (message: string) => {
     const msg = String(message || "").toLowerCase();
     if (msg.includes("title requerido")) return "El nombre de la ruta es obligatorio.";
+    if (msg.includes("invalid_company_id")) return "Hay tenants destino invalidos.";
+    if (msg.includes("forbidden_company_scope")) return "Solo superadmin puede elegir tenant destino.";
     if (msg.includes("not found")) return "No se encontro el recurso solicitado.";
     return "No se pudo guardar la ruta. Intentalo nuevamente.";
   };
@@ -77,23 +123,34 @@ export default function KmlPage() {
       openModal("Falta el archivo", "Primero selecciona un archivo KML para continuar.", "error");
       return;
     }
+    if (isSuperAdmin && selectedCompanyIds.length === 0) {
+      openModal("Falta tenant", "Selecciona al menos un tenant destino.", "error");
+      return;
+    }
 
     setSaving(true);
     try {
       const res = await fetch("/api/routes", {
         method: "POST",
         headers: getAuthHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ title, kml: kmlText }),
+        body: JSON.stringify({
+          title,
+          kml: kmlText,
+          companyIds: isSuperAdmin ? selectedCompanyIds : undefined,
+        }),
       });
       const json = await res.json();
       if (!res.ok || !json?.ok) {
-        openModal("No se pudo guardar", toSpanishMessage(json?.message || ""), "error");
+        openModal("No se pudo guardar", toSpanishMessage(json?.message || json?.error || ""), "error");
         return;
       }
       const createdId = String(json?.id ?? "").trim();
+      const createdCount = Number(json?.createdCount || 1);
       openModal(
         "Ruta guardada",
-        "La ruta KML se guardo correctamente. ¿Deseas validar la ruta en el editor activo?",
+        createdCount > 1
+          ? `La ruta KML se guardo en ${createdCount} tenants. Deseas validar la primera ruta creada?`
+          : "La ruta KML se guardo correctamente. Deseas validar la ruta en el editor activo?",
         "ok",
         createdId ? { nextHref: `/routes/editor?routeId=${createdId}`, confirmLabel: "Si, validar ahora" } : undefined
       );
@@ -125,6 +182,38 @@ export default function KmlPage() {
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-[#137fec]"
             />
           </div>
+
+          {isSuperAdmin ? (
+            <div className="mb-4">
+              <div className="mb-2 flex items-center justify-between">
+                <label className="block text-sm font-medium text-slate-700">Tenants destino</label>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                  {selectedCompanyIds.length} seleccionados
+                </span>
+              </div>
+              <div className="max-h-40 space-y-2 overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-3">
+                {companies.map((company) => {
+                  const checked = selectedCompanyIds.includes(company._id);
+                  return (
+                    <label key={company._id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-white">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          setSelectedCompanyIds((prev) => {
+                            if (e.target.checked) return Array.from(new Set([...prev, company._id]));
+                            return prev.filter((id) => id !== company._id);
+                          });
+                        }}
+                      />
+                      <span className="text-sm text-slate-800">{company.name || company._id}</span>
+                    </label>
+                  );
+                })}
+                {companies.length === 0 ? <div className="text-xs text-slate-500">No hay tenants disponibles.</div> : null}
+              </div>
+            </div>
+          ) : null}
 
           <div className="flex flex-wrap items-center gap-3">
             <input

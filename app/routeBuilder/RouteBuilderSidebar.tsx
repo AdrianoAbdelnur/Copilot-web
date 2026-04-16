@@ -28,6 +28,10 @@ type RouteBuilderSidebarProps = {
   onClearRoute: () => void;
   onRouteTitleChange: (value: string) => void;
   onSaveRoute: () => void;
+  showCompanySelector?: boolean;
+  companies?: Array<{ _id: string; name?: string }>;
+  selectedCompanyIds?: string[];
+  onToggleCompany?: (companyId: string, checked: boolean) => void;
 };
 
 function IconButton({
@@ -132,6 +136,10 @@ export default function RouteBuilderSidebar({
   onClearRoute,
   onRouteTitleChange,
   onSaveRoute,
+  showCompanySelector = false,
+  companies = [],
+  selectedCompanyIds = [],
+  onToggleCompany,
 }: RouteBuilderSidebarProps) {
   if (collapsed) {
     return (
@@ -202,6 +210,34 @@ export default function RouteBuilderSidebar({
       </div>
 
       <div style={{ padding: 8, display: "grid", alignContent: "start", gap: 8, overflowY: "auto", minHeight: 0 }}>
+        {showCompanySelector ? (
+          <div style={{ border: "1px solid var(--border)", borderRadius: 8, padding: 8, background: "var(--surface)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+              <div style={{ fontSize: 11, color: "var(--muted)" }}>Tenants destino</div>
+              <div style={{ fontSize: 11, color: "var(--muted)" }}>{selectedCompanyIds.length} seleccionados</div>
+            </div>
+            <div style={{ display: "grid", gap: 6, maxHeight: 120, overflowY: "auto" }}>
+              {companies.map((company) => {
+                const checked = selectedCompanyIds.includes(company._id);
+                return (
+                  <label
+                    key={company._id}
+                    style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--foreground)" }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => onToggleCompany?.(company._id, e.target.checked)}
+                    />
+                    <span>{company.name || company._id}</span>
+                  </label>
+                );
+              })}
+              {companies.length === 0 ? <div style={{ fontSize: 11, color: "var(--muted)" }}>Sin tenants disponibles.</div> : null}
+            </div>
+          </div>
+        ) : null}
+
         <div style={{ border: "1px solid var(--border)", borderRadius: 8, padding: 8, background: "var(--surface)" }}>
           <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>Inicio</div>
           <input

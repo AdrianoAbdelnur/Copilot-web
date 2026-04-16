@@ -1,8 +1,10 @@
 import { connectDB } from "@/lib/db";
 import { getTenantContext } from "@/lib/tenant";
+import { getAuthPayload } from "@/lib/auth";
 import Route from "@/models/RouteMap";
 import { parseKmlToPolicyPack } from "@/lib/policy/parseKml";
 import type { PolicyPack } from "@/lib/policy/types";
+import mongoose from "mongoose";
 
 export const runtime = "nodejs";
 
@@ -80,13 +82,25 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
+  const payload = getAuthPayload(req);
+  const role = String(payload?.user?.role || "").trim().toLowerCase();
   const title = String(body?.title ?? "route 1").trim();
   const kml = String(body?.kml ?? "").trim();
   const routePoints = parseRoutePoints(body?.route);
   const googleDraft = parseGoogleDraft(body?.googleDraft);
+  const requestedCompanyIds: string[] = Array.from(
+    new Set(
+      (Array.isArray(body?.companyIds) ? body.companyIds : [])
+        .map((id: unknown) => String(id || "").trim())
+        .filter((id: string) => id.length > 0),
+    ),
+  );
 
   if (!title) {
     return Response.json({ ok: false, message: "title requerido" }, { status: 400 });
+  }
+  if (requestedCompanyIds.some((id) => !mongoose.Types.ObjectId.isValid(id))) {
+    return Response.json({ ok: false, error: "invalid_company_id" }, { status: 400 });
   }
 
   let policyPack: PolicyPack | null = null;
@@ -103,16 +117,22 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, message: "kml o route requerido" }, { status: 400 });
   }
 
-  const payload: any = {
-    companyId: tenantContext.tenantId,
+  const targetCompanyIds =
+    requestedCompanyIds.length > 0 ? requestedCompanyIds : [tenantContext.tenantId];
+
+  if (requestedCompanyIds.length > 0 && role !== "superadmin") {
+    return Response.json({ ok: false, error: "forbidden_company_scope" }, { status: 403 });
+  }
+
+  const basePayload: any = {
     title,
     kml: kml || null,
     policyPack,
   };
 
   if (googleDraft) {
-    payload.google = googleDraft;
-    payload.nav = {
+    basePayload.google = googleDraft;
+    basePayload.nav = {
       status: "ready",
       compiledAt: new Date(),
       mode: "google_steps",
@@ -126,11 +146,19 @@ export async function POST(req: Request) {
     };
   }
 
-  const created = await Route.create(payload);
+  const docs = targetCompanyIds.map((companyId) => ({
+    ...basePayload,
+    companyId,
+  }));
+  const createdItems = await Route.insertMany(docs, { ordered: true });
+  const first = createdItems[0];
 
   return Response.json({
     ok: true,
-    id: String(created._id),
+    id: first ? String(first._id) : "",
+    ids: createdItems.map((item) => String(item._id)),
+    createdCount: createdItems.length,
+    multi: createdItems.length > 1,
     summary: policyPack
       ? {
           routePoints: policyPack.route.length,
