@@ -10,6 +10,10 @@ type UserItem = {
   lastName?: string;
   email?: string;
   role?: string;
+  memberships?: Array<{
+    companyId?: string | { _id?: string };
+    status?: string;
+  }>;
 };
 
 type RouteItem = {
@@ -50,6 +54,28 @@ type TripItem = {
   } | null;
   totals?: Record<string, number>;
 };
+
+type CompanyItem = {
+  _id: string;
+  name?: string;
+};
+
+function asCompanyId(raw: unknown): string {
+  if (!raw) return "";
+  if (typeof raw === "string") return raw.trim();
+  if (typeof raw === "object") return String((raw as { _id?: unknown })._id || "").trim();
+  return "";
+}
+
+function userHasActiveMembershipInCompany(user: UserItem, companyId: string): boolean {
+  if (!companyId) return false;
+  if (!Array.isArray(user.memberships)) return false;
+  return user.memberships.some((m) => {
+    const memberCompanyId = asCompanyId(m?.companyId);
+    const status = String(m?.status || "active").trim().toLowerCase();
+    return memberCompanyId === companyId && status !== "inactive";
+  });
+}
 
 function displayName(user: UserItem) {
   const full = `${user.firstName || ""} ${user.lastName || ""}`.trim();
@@ -164,6 +190,7 @@ function tripStatusTone(status?: string) {
 
 export default function TripsPage() {
   const [drivers, setDrivers] = useState<UserItem[]>([]);
+  const [companies, setCompanies] = useState<CompanyItem[]>([]);
   const [routes, setRoutes] = useState<RouteItem[]>([]);
   const [plans, setPlans] = useState<TripPlanItem[]>([]);
   const [liveTrips, setLiveTrips] = useState<TripItem[]>([]);
@@ -185,8 +212,10 @@ export default function TripsPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditTripModalOpen, setIsEditTripModalOpen] = useState(false);
   const [canManageTrips, setCanManageTrips] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [tripActionLoading, setTripActionLoading] = useState(false);
 
+  const [formCompanyIds, setFormCompanyIds] = useState<string[]>([]);
   const [formDriverIds, setFormDriverIds] = useState<string[]>([]);
   const [formRouteId, setFormRouteId] = useState("");
   const [formStartAt, setFormStartAt] = useState("");
@@ -212,6 +241,14 @@ export default function TripsPage() {
     return map;
   }, [routes]);
 
+  const availableDrivers = useMemo(() => {
+    if (!isSuperAdmin) return drivers;
+    if (formCompanyIds.length === 0) return [];
+    return drivers.filter((driver) =>
+      formCompanyIds.some((companyId) => userHasActiveMembershipInCompany(driver, companyId)),
+    );
+  }, [drivers, formCompanyIds, isSuperAdmin]);
+
   const loadAll = async () => {
     setLoading(true);
     setMsg("");
@@ -234,12 +271,29 @@ export default function TripsPage() {
       const driverCandidates = users.filter((u) => String(u.role || "").toLowerCase() === "driver");
       const role = String(meJson?.user?.role || "").toLowerCase();
       const canManage = role === "dispatcher" || role === "manager" || role === "admin" || role === "superadmin";
+      const viewerIsSuperAdmin = role === "superadmin";
 
       setDrivers(driverCandidates);
       setRoutes((routesJson?.items || []) as RouteItem[]);
       setPlans((plansJson?.items || []) as TripPlanItem[]);
       setLiveTrips((liveJson?.items || []) as TripItem[]);
       setCanManageTrips(canManage);
+      setIsSuperAdmin(viewerIsSuperAdmin);
+
+      if (viewerIsSuperAdmin) {
+        const companiesRes = await fetch("/api/companies", { headers: getAuthHeaders() });
+        const companiesJson = await companiesRes.json().catch(() => ({}));
+        const nextCompanies = Array.isArray(companiesJson?.items) ? (companiesJson.items as CompanyItem[]) : [];
+        setCompanies(nextCompanies);
+
+        const activeTenantId = String(meJson?.tenant?.tenantId || "").trim();
+        if (formCompanyIds.length === 0) {
+          if (activeTenantId) setFormCompanyIds([activeTenantId]);
+          else if (nextCompanies[0]?._id) setFormCompanyIds([nextCompanies[0]._id]);
+        }
+      } else {
+        setCompanies([]);
+      }
 
       if (formDriverIds.length === 0 && driverCandidates[0]?._id) setFormDriverIds([driverCandidates[0]._id]);
       if (!formRouteId && routesJson?.items?.[0]?._id) setFormRouteId(routesJson.items[0]._id);
@@ -256,6 +310,10 @@ export default function TripsPage() {
 
   const createPlan = async () => {
     setMsg("");
+    if (isSuperAdmin && formCompanyIds.length === 0) {
+      setMsg("Seleccioná al menos un tenant.");
+      return;
+    }
     if (formDriverIds.length === 0 || !formRouteId || !formStartAt) {
       setMsg("Completá choferes, ruta y hora.");
       return;
@@ -271,6 +329,7 @@ export default function TripsPage() {
         title: formTitle,
         notes: formNotes,
         status: "assigned",
+        companyIds: isSuperAdmin ? formCompanyIds : undefined,
       }),
     });
 
@@ -467,6 +526,11 @@ export default function TripsPage() {
   useEffect(() => {
     loadAll();
   }, []);
+
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    setFormDriverIds((prev) => prev.filter((id) => availableDrivers.some((driver) => driver._id === id)));
+  }, [availableDrivers, isSuperAdmin]);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -1087,13 +1151,47 @@ export default function TripsPage() {
                 />
               </div>
 
+              {isSuperAdmin ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-semibold text-slate-700">Tenants destino</label>
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                      {formCompanyIds.length} seleccionados
+                    </span>
+                  </div>
+                  <div className="max-h-40 space-y-2 overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    {companies.map((company) => {
+                      const checked = formCompanyIds.includes(company._id);
+                      return (
+                        <label key={company._id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-white">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              setFormCompanyIds((prev) => {
+                                if (e.target.checked) return Array.from(new Set([...prev, company._id]));
+                                return prev.filter((id) => id !== company._id);
+                              });
+                            }}
+                          />
+                          <span className="text-sm text-slate-800">{company.name || company._id}</span>
+                        </label>
+                      );
+                    })}
+                    {companies.length === 0 ? (
+                      <div className="text-xs text-slate-500">No hay tenants disponibles para seleccionar.</div>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-semibold text-slate-700">Choferes</label>
                   <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">{formDriverIds.length} seleccionados</span>
                 </div>
                 <div className="max-h-52 space-y-2 overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  {drivers.map((driver) => {
+                  {availableDrivers.map((driver) => {
                     const checked = formDriverIds.includes(driver._id);
                     return (
                       <label key={driver._id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-white">
@@ -1111,6 +1209,11 @@ export default function TripsPage() {
                       </label>
                     );
                   })}
+                  {availableDrivers.length === 0 ? (
+                    <div className="text-xs text-slate-500">
+                      {isSuperAdmin ? "Seleccioná tenant para habilitar choferes." : "No hay choferes disponibles."}
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
