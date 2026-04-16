@@ -1,4 +1,6 @@
 import Route from "@/models/RouteMap";
+import { getAuthPayload } from "@/lib/auth";
+import { getTenantContext } from "@/lib/tenant";
 import {
   decodePolyline,
   computeMatchReport,
@@ -625,6 +627,70 @@ export async function loadRouteDocOrThrow(id: string) {
   const doc = await Route.findById(id);
   if (!doc) return null;
   return doc;
+}
+
+type ScopedRouteDocResult =
+  | {
+      ok: true;
+      doc: any;
+      isSuperAdmin: boolean;
+      tenantId: string | null;
+    }
+  | {
+      ok: false;
+      status: number;
+      error: string;
+      message: string;
+    };
+
+export async function loadRouteDocByScope(req: Request, id: string): Promise<ScopedRouteDocResult> {
+  const payload = getAuthPayload(req);
+  const userId = String(payload?.user?.id || "").trim();
+  const role = String(payload?.user?.role || "").trim().toLowerCase();
+
+  if (!userId) {
+    return {
+      ok: false,
+      status: 401,
+      error: "unauthorized",
+      message: "Missing authenticated user",
+    };
+  }
+
+  if (role === "superadmin") {
+    const doc = await Route.findById(id);
+    if (!doc) {
+      return {
+        ok: false,
+        status: 404,
+        error: "route_not_found",
+        message: "Route no encontrada",
+      };
+    }
+    return { ok: true, doc, isSuperAdmin: true, tenantId: null };
+  }
+
+  const tenantContext = await getTenantContext(req);
+  if (!tenantContext.ok) {
+    return {
+      ok: false,
+      status: tenantContext.status,
+      error: tenantContext.error,
+      message: tenantContext.message,
+    };
+  }
+
+  const doc = await Route.findOne({ _id: id, companyId: tenantContext.tenantId });
+  if (!doc) {
+    return {
+      ok: false,
+      status: 404,
+      error: "route_not_found",
+      message: "Route no encontrada",
+    };
+  }
+
+  return { ok: true, doc, isSuperAdmin: false, tenantId: tenantContext.tenantId };
 }
 
 
