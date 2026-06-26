@@ -60,6 +60,8 @@ const TripSchema = new Schema(
     },
     startedAt: { type: Date, required: true, index: true },
     endedAt: { type: Date, default: null },
+    matchedDistanceM: { type: Number, default: 0 },
+    routeActivatedAt: { type: Date, default: null },
     startPos: { type: GeoPointSchema, required: true },
     endPos: { type: GeoPointSchema, default: null },
     live: { type: LiveSnapshotSchema, default: () => ({}) },

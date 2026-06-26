@@ -38,6 +38,8 @@ export async function POST(req: Request) {
       routeId,
       status: "active",
       startedAt,
+      matchedDistanceM: 0,
+      routeActivatedAt: null,
       startPos,
       live: {
         t: startedAt,

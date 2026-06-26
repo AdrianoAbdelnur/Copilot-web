@@ -3,7 +3,7 @@ import { getAuthPayload } from "@/lib/auth";
 import Trip from "@/models/Trip";
 
 export const CLOSED_STATUSES = new Set(["finished", "aborted"]);
-export const ALLOWED_STATUS_PATCH = new Set(["active", "paused"]);
+export const ALLOWED_STATUS_PATCH = new Set(["active", "paused", "aborted"]);
 export const ALLOWED_TOTALS_PATCH_KEYS = new Set([
   "distanceM",
   "durationS",

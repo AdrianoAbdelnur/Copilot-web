@@ -36,6 +36,15 @@ function haversineMeters(
   return 2 * r * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
+const ROUTE_ACTIVATION_THRESHOLD_M = 30;
+
+function hasRouteMatch(sample: { mm?: { index?: unknown; t?: unknown } | null }) {
+  if (!sample?.mm || typeof sample.mm !== "object") return false;
+  const index = Number((sample.mm as { index?: unknown }).index);
+  const t = Number((sample.mm as { t?: unknown }).t);
+  return Number.isFinite(index) && Number.isFinite(t);
+}
+
 export async function POST(req: Request, ctx: Ctx) {
   try {
     const userId = getUserIdOrNull(req);
@@ -96,11 +105,27 @@ export async function POST(req: Request, ctx: Ctx) {
 
     let distanceDeltaM = 0;
     let prevPos = lastSample?.pos && isValidPos(lastSample.pos) ? lastSample.pos : null;
+    let matchedDistanceDeltaM = 0;
+    const lastSampleMatched = hasRouteMatch(lastSample as { mm?: { index?: unknown; t?: unknown } | null });
+    let prevMatchedPos =
+      lastSampleMatched && lastSample?.pos && isValidPos(lastSample.pos)
+        ? lastSample.pos
+        : null;
     for (const doc of docsByTime) {
       if (prevPos) {
         distanceDeltaM += haversineMeters(prevPos, doc.pos);
       }
       prevPos = doc.pos;
+
+      const matched = hasRouteMatch(doc as { mm?: { index?: unknown; t?: unknown } | null });
+      if (matched) {
+        if (prevMatchedPos) {
+          matchedDistanceDeltaM += haversineMeters(prevMatchedPos, doc.pos);
+        }
+        prevMatchedPos = doc.pos;
+      } else {
+        prevMatchedPos = null;
+      }
     }
 
     await TripSample.insertMany(docs, { ordered: false });
@@ -118,6 +143,7 @@ export async function POST(req: Request, ctx: Ctx) {
       $inc: {
         "totals.samplesCount": docs.length,
         "totals.distanceM": Math.round(distanceDeltaM),
+        matchedDistanceM: Math.round(matchedDistanceDeltaM),
       },
       $set: {
         "live.t": latestDoc.t,
@@ -128,6 +154,13 @@ export async function POST(req: Request, ctx: Ctx) {
       },
     };
     if (maxSpeed !== null) update.$max = { "totals.maxSpeedKmh": maxSpeed };
+    const currentMatchedDistanceM = Number((trip as { matchedDistanceM?: unknown }).matchedDistanceM ?? 0) || 0;
+    if (
+      !(trip as { routeActivatedAt?: unknown }).routeActivatedAt &&
+      currentMatchedDistanceM + matchedDistanceDeltaM >= ROUTE_ACTIVATION_THRESHOLD_M
+    ) {
+      update.$set.routeActivatedAt = latestDoc.t;
+    }
 
     await Trip.updateOne({ _id: trip._id }, update);
 
