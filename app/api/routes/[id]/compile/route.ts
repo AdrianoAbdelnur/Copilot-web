@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/db";
-import Route from "@/models/RouteMap";
 import { computeTotalsFromSteps } from "@/lib/routeRepair";
+import { loadRouteDocByScope } from "@/lib/routeRepair";
 
 export const runtime = "nodejs";
 
@@ -60,15 +60,18 @@ const pickAnchors = (route: LatLng[], maxAnchors: number) => {
   return out;
 };
 
-export async function POST(_: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   await connectDB();
 
   const { id } = await ctx.params;
-
-  const doc = await Route.findById(id);
-  if (!doc) {
-    return Response.json({ ok: false, message: "Route no encontrada" }, { status: 404 });
+  const scoped = await loadRouteDocByScope(req, id);
+  if (!scoped.ok) {
+    return Response.json(
+      { ok: false, error: scoped.error, message: scoped.message },
+      { status: scoped.status },
+    );
   }
+  const doc = scoped.doc;
 
   const policyRoute: LatLng[] = doc.policyPack?.route ?? [];
   if (policyRoute.length < 2) {

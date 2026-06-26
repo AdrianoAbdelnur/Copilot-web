@@ -1,5 +1,6 @@
 import { connectDB } from "@/lib/db";
 import RouteRevision from "@/models/RouteRevision";
+import { loadRouteDocByScope } from "@/lib/routeRepair";
 
 export const runtime = "nodejs";
 
@@ -136,6 +137,13 @@ function mergeDensePath(originalDensePath: LatLng[], patches: PatchPayload["patc
 export async function POST(req: Request, ctx: Ctx) {
   await connectDB();
   const { id } = await ctx.params;
+  const scoped = await loadRouteDocByScope(req, id);
+  if (!scoped.ok) {
+    return Response.json(
+      { ok: false, error: scoped.error, message: scoped.message },
+      { status: scoped.status },
+    );
+  }
 
   const body = (await req.json().catch(() => null)) as PatchPayload | null;
 

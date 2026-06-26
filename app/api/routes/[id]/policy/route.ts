@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
-import RouteModel from "@/models/RouteMap";
 import { connectDB } from "@/lib/db";
+import { loadRouteDocByScope } from "@/lib/routeRepair";
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   await connectDB();
@@ -29,8 +29,14 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     return NextResponse.json({ ok: false, error: "Nada para guardar (pois/segments)" }, { status: 400 });
   }
 
-  const doc = await RouteModel.findById(id);
-  if (!doc) return NextResponse.json({ ok: false, error: "Ruta no encontrada" }, { status: 404 });
+  const scoped = await loadRouteDocByScope(req, id);
+  if (!scoped.ok) {
+    return NextResponse.json(
+      { ok: false, error: scoped.error, message: scoped.message },
+      { status: scoped.status },
+    );
+  }
+  const doc = scoped.doc;
 
   if (!doc.policyPack || typeof doc.policyPack !== "object") doc.policyPack = {};
 

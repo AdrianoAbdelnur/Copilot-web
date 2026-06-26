@@ -45,7 +45,12 @@ export async function PATCH(req: Request, ctx: Ctx) {
       return Response.json({ ok: false, error: "invalid_status" }, { status: 400 });
     }
 
-    await Trip.updateOne({ _id: trip._id }, { $set: { status } });
+    const patch: Record<string, unknown> = { status };
+    if (status === "aborted") {
+      patch.endedAt = new Date();
+    }
+
+    await Trip.updateOne({ _id: trip._id }, { $set: patch });
 
     return Response.json({ ok: true });
   } catch {

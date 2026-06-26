@@ -1,7 +1,6 @@
 import { connectDB } from "@/lib/db";
-import Route from "@/models/RouteMap";
 import RouteRevision from "@/models/RouteRevision";
-import { buildMatchReport, computeTotalsFromSteps } from "@/lib/routeRepair";
+import { buildMatchReport, computeTotalsFromSteps, loadRouteDocByScope } from "@/lib/routeRepair";
 
 export const runtime = "nodejs";
 
@@ -28,10 +27,14 @@ export async function GET(req: Request, ctx: Ctx) {
   await connectDB();
   const { id } = await ctx.params;
 
-  const doc = await Route.findById(id).lean();
-  if (!doc) {
-    return Response.json({ ok: false, message: "Route no encontrada" }, { status: 404 });
+  const scoped = await loadRouteDocByScope(req, id);
+  if (!scoped.ok) {
+    return Response.json(
+      { ok: false, error: scoped.error, message: scoped.message },
+      { status: scoped.status },
+    );
   }
+  const doc = scoped.doc.toObject ? scoped.doc.toObject() : scoped.doc;
 
   return Response.json({ ok: true, id: String(doc._id), route: doc });
 }
@@ -46,10 +49,14 @@ export async function POST(req: Request, ctx: Ctx) {
       ? body.manualApprovalReason.trim()
       : "";
 
-  const doc = await Route.findById(id);
-  if (!doc) {
-    return Response.json({ ok: false, message: "Route no encontrada" }, { status: 404 });
+  const scoped = await loadRouteDocByScope(req, id);
+  if (!scoped.ok) {
+    return Response.json(
+      { ok: false, error: scoped.error, message: scoped.message },
+      { status: scoped.status },
+    );
   }
+  const doc = scoped.doc;
 
   const rev = await RouteRevision.findOne({ routeId: doc._id }).sort({ version: -1 });
   if (!rev) {

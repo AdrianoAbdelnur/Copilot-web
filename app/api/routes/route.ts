@@ -171,6 +171,21 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
   await connectDB();
+  const authPayload = getAuthPayload(req);
+  const role = String(authPayload?.user?.role || "").trim().toLowerCase();
+
+  if (role === "superadmin") {
+    const items = await Route.find({})
+      .select("title createdAt updatedAt nav companyId")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return Response.json({
+      ok: true,
+      items,
+      tenant: { resolved: false, scope: "all_companies", source: "superadmin" },
+    });
+  }
 
   const tenantContext = await getTenantContext(req);
   if (!tenantContext.ok) {
@@ -181,7 +196,7 @@ export async function GET(req: Request) {
   }
 
   const items = await Route.find({ companyId: tenantContext.tenantId })
-    .select("title createdAt updatedAt nav")
+    .select("title createdAt updatedAt nav companyId")
     .sort({ createdAt: -1 })
     .lean();
 
