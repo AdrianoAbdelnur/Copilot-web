@@ -65,10 +65,10 @@ export default function Home() {
       },
       {
         href: "/trips",
-        title: "Asignación de viajes",
-        description: "Asigná una ruta a uno o varios choferes, con fecha/hora de inicio y comentarios operativos.",
-        badge: "Despacho",
-        icon: "assignment_ind",
+        title: "Detalles de viajes",
+        description: "Consulta viajes generados, estado operativo, avance real e información capturada durante el recorrido.",
+        badge: "Auditoría",
+        icon: "travel_explore",
         tone: "primary",
       },
       {
